@@ -1,0 +1,23 @@
+<html>
+    <head>
+        <title>Starwell</title>
+        <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+        <script type="module" src="./src/main.ts"></script>
+        <style>
+            .hex-tile:hover {
+                fill: yellow;
+            }
+
+            .hex-coordinates,
+            .hex-tile:hover ~ .hex-piece {
+                visibility: hidden;
+            }
+
+            .hex-tile:hover ~ .hex-coordinates {
+                visibility: visible;
+            }
+        </style>
+    </head>
+    <body>
+    </body>
+</html>
