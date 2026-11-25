@@ -3,3 +3,15 @@ An implementation of Stefan Gruber's [Starwell](https://www.artstation.com/artwo
 
 ![./starwell-hex-chess.png](Screenshot of Starwell)
 
+## Install
+
+This projects uses `bun` to compile, bundle and run the JavaScript. Follow these docs to (install bun)[https://bun.com/docs/installation].
+
+```
+git clone https://github.com/geluso/stefan-grubers-starwell
+cd stefen-grubers-starwell
+bun index.html
+```
+
+Visit <http:localhost:3000>
+
