@@ -120,7 +120,25 @@ try {
   assert.deepEqual((await guest.from('games').select('id').eq('id', privateRoom)).data, [])
   await call(guest, 'observe', { room: privateRoom }, 404)
   assert.equal((await call(player1, 'read', { room: privateRoom })).seat, 1)
-  console.log('Public lobby, spectator access, private visibility, turns, concurrent moves, Realtime, and history passed.')
+
+  const localId = crypto.randomUUID()
+  const localState = {
+    version: 1, seats: ['human', 'cpu', 'human'], initial_board: created.initial_board,
+    moves: power.moves, current_player: power.current_player,
+  }
+  const save = await player1.rpc('starwell_save_local_game', { game_id: localId, game_state: localState, turns: power.moves.length })
+  assert.ifError(save.error)
+  const older = await player1.rpc('starwell_save_local_game', {
+    game_id: localId, game_state: { ...localState, moves: [] }, turns: 0,
+  })
+  assert.ifError(older.error)
+  const restored = await player1.from('local_games').select('state, turn_number').eq('id', localId).single()
+  assert.ifError(restored.error)
+  assert.equal(restored.data.turn_number, power.moves.length)
+  assert.deepEqual(restored.data.state, localState)
+  assert.deepEqual((await player2.from('local_games').select('id').eq('id', localId)).data, [])
+  assert.ok((await guest.from('local_games').select('id').eq('id', localId)).error)
+  console.log('Public lobby, spectator access, turn validation, Realtime, and private local saves passed.')
 } finally {
   if (channel) await listener?.removeChannel(channel)
   listener?.realtime.disconnect()

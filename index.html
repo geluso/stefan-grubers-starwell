@@ -46,6 +46,8 @@
                     <button type="button" id="online-stop-watching" class="export-action" hidden>Stop watching</button>
                     <span id="online-turn" role="status"></span>
                 </div>
+                <p id="local-turn-status" class="local-status" role="status" hidden></p>
+                <p id="local-save-status" class="local-status" role="status" hidden></p>
                 <button type="button" id="export-game-state" class="export-action export-game-state">Export</button>
             </section>
             <div class="palette-panel">
@@ -161,8 +163,7 @@
                     <h3 id="public-lobby-title">Public games</h3>
                     <button type="button" id="public-lobby-refresh" class="export-action">Refresh</button>
                 </div>
-                <p id="public-lobby-status" role="status" hidden></p>
-                <div id="public-games-table" class="public-games-scroll" hidden>
+                <div id="public-games-table" class="public-games-scroll">
                     <table class="public-games-table" aria-labelledby="public-lobby-title">
                         <thead>
                             <tr>
@@ -174,14 +175,47 @@
                             </tr>
                         </thead>
                         <tbody id="public-game-list"></tbody>
+                        <tbody id="public-lobby-status-row" hidden>
+                            <tr><td class="public-lobby-message" colspan="5"><span id="public-lobby-status" role="status"></span></td></tr>
+                        </tbody>
                     </table>
                 </div>
                 <button type="button" id="public-lobby-more" class="export-action" hidden>Load more</button>
             </section>
             <footer id="public-lobby-footer" class="public-lobby-footer">
-                <a href="./" class="export-action">Create Local Game</a>
+                <button type="button" id="public-lobby-local" class="export-action">Create Local Game</button>
                 <button type="button" id="public-lobby-create" class="export-action">Create Online Game</button>
             </footer>
+        </dialog>
+        <dialog id="local-game-dialog" class="export-dialog online-dialog local-game-dialog" aria-labelledby="local-game-title">
+            <header class="export-dialog-header">
+                <h2 id="local-game-title">Create Local Game</h2>
+                <form method="dialog"><button class="export-action">Close</button></form>
+            </header>
+            <form id="local-game-form">
+                <div class="local-seat" role="radiogroup" aria-labelledby="local-seat-label-1">
+                    <span id="local-seat-label-1"><span class="move-player-color" aria-hidden="true"></span>Player 1</span>
+                    <label><input type="radio" name="local-seat-1" value="human" checked> Local Human</label>
+                    <label><input type="radio" name="local-seat-1" value="cpu"> Local CPU</label>
+                </div>
+                <div class="local-seat" role="radiogroup" aria-labelledby="local-seat-label-2">
+                    <span id="local-seat-label-2"><span class="move-player-color" aria-hidden="true"></span>Player 2</span>
+                    <label><input type="radio" name="local-seat-2" value="human"> Local Human</label>
+                    <label><input type="radio" name="local-seat-2" value="cpu" checked> Local CPU</label>
+                </div>
+                <div class="local-seat" role="radiogroup" aria-labelledby="local-seat-label-3">
+                    <span id="local-seat-label-3"><span class="move-player-color" aria-hidden="true"></span>Player 3</span>
+                    <label><input type="radio" name="local-seat-3" value="human"> Local Human</label>
+                    <label><input type="radio" name="local-seat-3" value="cpu" checked> Local CPU</label>
+                </div>
+                <label class="local-random-start"><input type="checkbox" name="random-start" checked> Random player start positions?</label>
+                <button type="submit" class="export-action local-start-game">Start Game</button>
+            </form>
+            <section id="local-game-saves" hidden aria-labelledby="local-game-saves-title">
+                <h3 id="local-game-saves-title">Saved local games</h3>
+                <ul id="local-game-save-list"></ul>
+                <p id="local-game-load-status" role="status" hidden></p>
+            </section>
         </dialog>
         <dialog id="game-invite-dialog" class="export-dialog online-dialog" aria-labelledby="game-invite-title">
             <header class="export-dialog-header">

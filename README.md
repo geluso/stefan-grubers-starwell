@@ -31,6 +31,10 @@ Upload the contents of `dist/` to your website. The generated `index.html` loads
 
 Starwell uses Supabase for email sign-in, display names, public rooms, and game history. DreamHost serves the frontend at `https://5tephen.com/starwell/`. Open **New Game** to browse the lobby, join an open seat, or watch a public game. Guests can watch the board and review moves. Seated players sign in to play, and the game begins when all three seats are filled. The server checks turn order and move legality before saving each turn. Players can reload their invite link to resume, and observers can share the watch link in their address bar.
 
+Choose **Create Local Game** to set each seat to a human or a CPU and optionally shuffle the starting positions. The CPU uses a small MaxN search, the three-player version of minimax. If you're signed in when you start, Supabase saves your completed turns privately. Reopen **Create Local Game** to resume a saved game.
+
+Adjust the CPU move preview and between-turn delays in [`src/local-cpu-config.ts`](src/local-cpu-config.ts). Both values are in milliseconds.
+
 ### Run locally
 
 With Docker running, use the Supabase CLI to apply the migration and start the local services.

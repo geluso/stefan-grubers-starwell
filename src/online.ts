@@ -1,5 +1,6 @@
 import { createClient, FunctionsHttpError, type RealtimeChannel, type Session } from '@supabase/supabase-js'
 import { DEFAULT_GAME_RULES, type GameRules } from './game-rules'
+import type { LocalGameState } from './local-game'
 import type { BoardPosition } from './online-game'
 
 export type OnlineGame = {
@@ -60,10 +61,10 @@ export function bindOnlinePlay(onGame: (game: OnlineGame | null) => void) {
   const invitedGame = byId<HTMLButtonElement>('online-invited')
   const currentGame = byId('online-current')
   const publicLobby = byId('public-lobby')
-  const publicTable = byId('public-games-table')
   const publicFooter = byId('public-lobby-footer')
   const publicGames = byId('public-game-list')
   const publicStatus = byId('public-lobby-status')
+  const publicStatusRow = byId('public-lobby-status-row')
   const refreshLobby = byId<HTMLButtonElement>('public-lobby-refresh')
   const moreGames = byId<HTMLButtonElement>('public-lobby-more')
   const roomPanel = byId('online-room')
@@ -177,7 +178,7 @@ export function bindOnlinePlay(onGame: (game: OnlineGame | null) => void) {
 
   function lobbyStatus(message: string) {
     publicStatus.textContent = message
-    publicStatus.hidden = !message
+    publicStatusRow.hidden = !message
   }
 
   async function loadPublicGames(append = false) {
@@ -233,7 +234,6 @@ export function bindOnlinePlay(onGame: (game: OnlineGame | null) => void) {
       }
       lobbyOffset += games.length
       moreGames.hidden = !hasMore
-      publicTable.hidden = !publicGames.children.length
       lobbyStatus(publicGames.children.length ? '' : 'No public games yet.')
     } catch (error) {
       lobbyStatus(error instanceof Error ? error.message : 'Could not load public games.')
@@ -517,6 +517,25 @@ export function bindOnlinePlay(onGame: (game: OnlineGame | null) => void) {
   }
 
   return {
+    currentUserId: () => session?.user.id ?? null,
+    async saveLocalGame(id: string, state: LocalGameState) {
+      const { error } = await client.rpc('starwell_save_local_game', {
+        game_id: id, game_state: state, turns: state.moves.length,
+      })
+      if (error) throw error
+    },
+    async listLocalGames() {
+      const { data, error } = await client.from('local_games')
+        .select('id, updated_at, turn_number').order('updated_at', { ascending: false })
+      if (error) throw error
+      return data
+    },
+    async loadLocalGame(id: string): Promise<LocalGameState> {
+      const { data, error } = await client.from('local_games').select('state').eq('id', id).single()
+      if (error) throw error
+      return data.state
+    },
+    leaveGame,
     openLobby() {
       mode = 'lobby'
       notice('')

@@ -81,6 +81,10 @@ body {
     visibility: hidden;
 }
 
+[data-cpu-selected] > .hex-piece {
+    filter: drop-shadow(0 0 3px #ffd369) drop-shadow(0 0 5px #ffd369);
+}
+
 .hex-drag-ghost {
     opacity: 0.85;
 }
@@ -715,9 +719,17 @@ html[data-pieces-palette="alternate"] .hex-piece[data-army="purple"] {
     width: 26%;
 }
 
-.public-games-table :is(th, td):last-child {
+.public-games-table th:last-child {
     width: 4rem;
+}
+
+.public-games-table :is(th, td):last-child {
     text-align: center;
+}
+
+.public-games-table .public-lobby-message {
+    padding-block: 2.5rem;
+    color: #d8c8e6;
 }
 
 .public-games-table tr:last-child td {
@@ -746,13 +758,71 @@ html[data-pieces-palette="alternate"] .hex-piece[data-army="purple"] {
 }
 
 @media (max-width: 520px) {
-    .public-games-table :is(th, td),
+    .public-games-table :is(th, td:not(.public-lobby-message)),
     .public-games-table button {
         padding: 5px;
         font-size: 11px;
     }
 
-    .public-games-table :is(th, td):last-child {
+    .public-games-table th:last-child {
         width: 3.15rem;
     }
+}
+
+.local-game-dialog {
+    width: min(33rem, calc(100% - 24px));
+}
+
+.local-seat {
+    display: grid;
+    grid-template-columns: minmax(0, .9fr) repeat(2, minmax(0, 1fr));
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 10px;
+    min-width: 0;
+    padding: 8px;
+    border: 1px solid #4b3e5d;
+    border-radius: 8px;
+}
+
+.local-seat:nth-child(1) { --player-color: var(--player-1-color); }
+.local-seat:nth-child(2) { --player-color: var(--player-2-color); }
+.local-seat:nth-child(3) { --player-color: var(--player-3-color); }
+
+.online-dialog .local-seat label {
+    margin: 0;
+}
+
+.local-seat input,
+.local-random-start input {
+    accent-color: #c797ed;
+    cursor: pointer;
+}
+
+.online-dialog .local-random-start {
+    margin-block: 12px;
+}
+
+.local-start-game {
+    width: 100%;
+    min-height: 44px;
+}
+
+.local-status {
+    margin: 8px 0 0;
+    color: #d8c8e6;
+}
+
+#local-game-save-list {
+    display: grid;
+    gap: 6px;
+    padding: 0;
+    max-height: 24dvh;
+    overflow: auto;
+    list-style: none;
+}
+
+#local-game-save-list button {
+    width: 100%;
+    text-align: left;
 }

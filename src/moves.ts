@@ -130,13 +130,20 @@ export function checkedPlayersBy(board: Board, attacker: string, rules: GameRule
 export function legalMoves(
   board: Board, start: CubeCoordinates, mode: MoveMode = 'normal', rules: GameRules = DEFAULT_GAME_RULES,
 ): CubeCoordinates[] {
-  const piece = board.get(getKey(start))?.piece
-  if (!piece) return []
+  return Array.from(legalMoveResults(board, start, mode, rules), ({ destination }) => destination)
+}
 
-  return movementSquares(board, start, piece, rules).filter(end => {
-    if (mode === 'power' && board.get(getKey(end))?.piece) return false
-    return !isInCheck(boardAfterMove(board, start, end, piece), piece.color, rules)
-  })
+export function* legalMoveResults(
+  board: Board, start: CubeCoordinates, mode: MoveMode = 'normal', rules: GameRules = DEFAULT_GAME_RULES,
+) {
+  const piece = board.get(getKey(start))?.piece
+  if (!piece) return
+
+  for (const destination of movementSquares(board, start, piece, rules)) {
+    if (mode === 'power' && board.get(getKey(destination))?.piece) continue
+    const next = boardAfterMove(board, start, destination, piece)
+    if (!isInCheck(next, piece.color, rules)) yield { destination, board: next }
+  }
 }
 
 export function previewDoubleJumps(
@@ -164,12 +171,9 @@ export function previewDoubleJumps(
 export function makeMove(
   board: Board, start: CubeCoordinates, end: CubeCoordinates, mode: MoveMode = 'normal', rules: GameRules = DEFAULT_GAME_RULES,
 ): Board | null {
-  const piece = board.get(getKey(start))?.piece
-  if (!piece) return null
-
   const endKey = getKey(end)
-  const destination = legalMoves(board, start, mode, rules).find(square => getKey(square) === endKey)
-  if (!destination) return null
-
-  return boardAfterMove(board, start, destination, piece)
+  for (const move of legalMoveResults(board, start, mode, rules)) {
+    if (getKey(move.destination) === endKey) return move.board
+  }
+  return null
 }

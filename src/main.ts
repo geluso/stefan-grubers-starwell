@@ -5,9 +5,11 @@ import { bindBoardPointer } from './board-pointer'
 import { COLOR_MAP, getPlayerNumber, PIECE_COLORS } from './color-map'
 import { DEFAULT_GAME_RULES, type GameRules } from './game-rules'
 import { exportGameState, exportMoves } from './game-state'
+import { LOCAL_CPU_TIMING } from './local-cpu-config'
+import { chooseCpuTurn, randomizeStartingPositions, type LocalGameState, type LocalSeats } from './local-game'
 import { BOARD_RADIUS, canDoubleJump, checkedPlayersBy, createBoard, getHexName, getKey, legalMoves, makeMove, previewDoubleJumps, type Board } from './moves'
 import { bindOnlinePlay, type OnlineGame } from './online'
-import { restoreOnlineBoard } from './online-game'
+import { restoreOnlineBoard, serializeBoard } from './online-game'
 import type { Piece } from './pieces'
 import { loadPreferences, savePreference } from './preferences'
 import { canMoveOnTurn, playerAfterMove } from './turn-order'
@@ -29,6 +31,11 @@ const preferences = loadPreferences()
 let onlineGame: OnlineGame | null = null
 let onlineSaving = false
 let pendingOnlinePath: string[] | null = null
+let localSession: { id: string; seats: LocalSeats; owner: string | null } | null = null
+let cpuTimer: number | undefined
+let cpuNextTurnAt = 0
+let cpuPreviewKey: string | null = null
+let stalledCpuBoard: Board | null = null
 let localGame: {
   history: typeof history
   rows: HTMLTableRowElement[]
@@ -196,6 +203,8 @@ let lastMovePlayer = 0
 let lastMoveCell: HTMLTableCellElement | null = null
 let lastMovePath = ''
 const finishOnline = document.querySelector<HTMLButtonElement>('#online-finish')!
+const localTurnStatus = document.querySelector<HTMLElement>('#local-turn-status')!
+const localSaveStatus = document.querySelector<HTMLElement>('#local-save-status')!
 
 function reviewingHistory(): boolean {
   return viewedTurn < history.length - 1
@@ -224,7 +233,11 @@ function isPlayerTurn(piece: Piece): boolean {
     return !onlineSaving && onlineGame.status === 'active' && onlineGame.seat === onlineGame.current_player &&
       canMoveOnTurn(piece.color, onlineGame.seat)
   }
-  return canMoveOnTurn(piece.color, currentPlayer)
+  return !isLocalCpuTurn() && canMoveOnTurn(piece.color, currentPlayer)
+}
+
+function isLocalCpuTurn() {
+  return !onlineGame && localSession?.seats[currentPlayer - 1] === 'cpu'
 }
 
 function updateTurnAfterMove(player: number, secondJumpPending = false) {
@@ -409,16 +422,38 @@ function select(position: CubeCoordinates | null, continuingJump = false) {
   }
 }
 
+function recordLocalTurn(
+  piece: Piece, start: CubeCoordinates, destination: CubeCoordinates, route: string, next: Board,
+  continuing: boolean, canContinue: boolean,
+) {
+  const cpuMoved = isLocalCpuTurn()
+  const cell = recordMove(piece, start, route, next, continuing)
+  const entry = { board: next, cell }
+  if (continuing) history[history.length - 1] = entry
+  else history.push(entry)
+  viewedTurn = history.length - 1
+  board = next
+  renderBoard()
+  select(canContinue ? destination : null, canContinue)
+  updateHistoryPosition()
+  updateTurnAfterMove(getPlayerNumber(piece.color), secondKnightJump)
+  if (!secondKnightJump) localTurnFinished(cpuMoved)
+}
+
 function handleClick(position: CubeCoordinates) {
-  if (reviewingHistory() || onlineSaving) return
+  if (reviewingHistory() || onlineSaving || isLocalCpuTurn()) return
   const key = getKey(position)
   const startKey = selected && getKey(selected)
   const piece = startKey && board.get(startKey)?.piece
   if (selected && startKey && piece && isPlayerTurn(piece)) {
     if (startKey === key) {
       if (pendingOnlinePath) { void submitOnlineMove(pendingOnlinePath); return }
-      if (secondKnightJump) updateTurnAfterMove(currentPlayer)
+      const finishesJump = secondKnightJump
       select(null)
+      if (finishesJump) {
+        updateTurnAfterMove(currentPlayer)
+        localTurnFinished()
+      }
       return
     }
 
@@ -443,26 +478,17 @@ function handleClick(position: CubeCoordinates) {
         return
       }
       const route = (via ? moveLeg(via, board) : '') + moveLeg(position, afterFirst)
-      const cell = recordMove(piece, selected, route, next, secondKnightJump)
-      const entry = { board: next, cell }
-      if (secondKnightJump) history[history.length - 1] = entry
-      else history.push(entry)
-      viewedTurn = history.length - 1
-      updateHistoryPosition()
-      board = next
-      tiles.get(startKey)?.renderPiece(null)
-      if (via) tiles.get(getKey(via))?.renderPiece(null)
-      tiles.get(key)?.renderPiece(board.get(key)?.piece ?? null)
-      select(canContinue ? position : null, canContinue)
-      updateTurnAfterMove(getPlayerNumber(piece.color), secondKnightJump)
+      recordLocalTurn(piece, selected, position, route, next, secondKnightJump, canContinue)
       return
     }
   }
 
   if (pendingOnlinePath) { void submitOnlineMove(pendingOnlinePath); return }
-  if (secondKnightJump) updateTurnAfterMove(currentPlayer)
+  const finishesJump = secondKnightJump
+  if (finishesJump) updateTurnAfterMove(currentPlayer)
   const target = board.get(key)?.piece
   select(target && isPlayerTurn(target) ? position : null)
+  if (finishesJump) localTurnFinished()
 }
 
 function isMarkedDestination(key: string): boolean {
@@ -471,7 +497,7 @@ function isMarkedDestination(key: string): boolean {
 
 const cancelBoardPointer = bindBoardPointer(draw.node, {
   press(key) {
-    if (reviewingHistory() || onlineSaving) return null
+    if (reviewingHistory() || onlineSaving || isLocalCpuTurn()) return null
     const cell = board.get(key)
     if (!cell) return null
 
@@ -511,6 +537,7 @@ function showHistoryTurn(turn: number) {
   select(selected, secondKnightJump)
   updateHistoryPosition()
   updateTurnIndicator()
+  scheduleCpu()
 }
 
 document.addEventListener('keydown', event => {
@@ -536,17 +563,23 @@ function renderBoard() {
   for (const [key, { renderPiece }] of tiles) renderPiece(shown.get(key)?.piece ?? null)
 }
 
-function updateOnlineBoard(next: OnlineGame | null) {
+function updatePlayerNames(next: OnlineGame | null) {
   playerRoster.forEach((label, index) => {
     const fallback = `Player ${index + 1}`
     const name = next?.players.find(player => player.seat === index + 1)?.name
-    label.textContent = name ?? (next ? 'Open seat' : fallback)
+    const localName = localSession?.seats[index] === 'cpu' ? `${fallback} (CPU)` : fallback
+    label.textContent = name ?? (next ? 'Open seat' : localName)
     playerNames[index].textContent = name ?? fallback
   })
+}
+
+function updateOnlineBoard(next: OnlineGame | null) {
+  updatePlayerNames(next)
   const savedLocalGame = localGame
   const sameRoom = next?.id === onlineGame?.id
   if (sameRoom && next?.revision === onlineGame?.revision && next?.seat === onlineGame?.seat) return
   cancelBoardPointer()
+  clearCpuPreview()
 
   if (next && !onlineGame) {
     localGame = {
@@ -557,6 +590,7 @@ function updateOnlineBoard(next: OnlineGame | null) {
 
   const reviewedTurn = sameRoom && reviewingHistory() ? viewedTurn : null
   onlineGame = next
+  if (next) setLocalStatus(localSaveStatus)
   onlineSaving = false
   pendingOnlinePath = null
   finishOnline.hidden = true
@@ -598,10 +632,14 @@ function updateOnlineBoard(next: OnlineGame | null) {
   else if (moveHistoryList) moveHistoryList.scrollTop = moveHistoryList.scrollHeight
   updateHistoryPosition()
   updateTurnIndicator()
+  scheduleCpu()
 }
 
 const online = bindOnlinePlay(updateOnlineBoard)
-document.querySelector('#new-game-open')?.addEventListener('click', online.openLobby)
+document.querySelector('#new-game-open')?.addEventListener('click', () => {
+  online.openLobby()
+  scheduleCpu()
+})
 
 async function submitOnlineMove(path: string[]) {
   const game = onlineGame
@@ -625,3 +663,193 @@ async function submitOnlineMove(path: string[]) {
 finishOnline.addEventListener('click', () => {
   if (pendingOnlinePath) void submitOnlineMove(pendingOnlinePath)
 })
+
+function setLocalStatus(target: HTMLElement, message = '') {
+  target.textContent = message
+  target.hidden = !message
+}
+
+function clearCpuPreview() {
+  if (!cpuPreviewKey) return
+  tiles.get(cpuPreviewKey)?.tile.node.removeAttribute('data-cpu-selected')
+  cpuPreviewKey = null
+  select(null)
+}
+
+function scheduleCpu() {
+  window.clearTimeout(cpuTimer)
+  clearCpuPreview()
+  const canPlay = () => isLocalCpuTurn() && !reviewingHistory() && !document.querySelector('dialog[open]')
+  if (!canPlay()) {
+    setLocalStatus(localTurnStatus)
+    return
+  }
+  const player = currentPlayer
+  if (stalledCpuBoard === board) {
+    setLocalStatus(localTurnStatus, `Player ${player} (CPU) has no legal moves.`)
+    return
+  }
+  const delay = Math.max(0, cpuNextTurnAt - performance.now())
+  setLocalStatus(localTurnStatus, `Player ${player} (CPU) ${delay > 0 ? 'is next.' : 'is thinking…'}`)
+  const position = board
+  const isCurrentTurn = () => board === position && currentPlayer === player && canPlay()
+  cpuTimer = window.setTimeout(() => {
+    if (!isCurrentTurn()) return
+    const turn = chooseCpuTurn(position, player, gameRules)
+    if (!turn) {
+      stalledCpuBoard = position
+      setLocalStatus(localTurnStatus, `Player ${player} (CPU) has no legal moves.`)
+      return
+    }
+    cpuPreviewKey = getKey(turn.from)
+    tiles.get(cpuPreviewKey)?.tile.attr('data-cpu-selected', 'true')
+    select(turn.from)
+    setLocalStatus(localTurnStatus, `Player ${player} (CPU) is thinking…`)
+    cpuTimer = window.setTimeout(() => {
+      clearCpuPreview()
+      if (!isCurrentTurn()) return
+      const piece = position.get(getKey(turn.from))!.piece!
+      const route = turn.via ? moveLeg(turn.via, position) + `-${getHexName(turn.destination.q, turn.destination.r)}` :
+        moveLeg(turn.destination, position)
+      recordLocalTurn(piece, turn.from, turn.destination, route, turn.board, false, false)
+    }, LOCAL_CPU_TIMING.selectionDelayMs)
+  }, delay)
+}
+
+let localSaveSequence = 0
+function saveLocalHistory() {
+  const session = localSession
+  if (!session?.owner || online.currentUserId() !== session.owner || onlineGame) return
+  const sequence = ++localSaveSequence
+  const moves = history.slice(1).flatMap(({ board, cell }) => cell ? [{
+    player: cell.cellIndex + 1, notation: cell.textContent ?? '', board_after: serializeBoard(board),
+  }] : [])
+  const state: LocalGameState = {
+    version: 1, seats: session.seats, initial_board: serializeBoard(history[0].board), moves, current_player: currentPlayer,
+  }
+  void online.saveLocalGame(session.id, state).then(() => {
+    if (sequence === localSaveSequence && localSession === session && !onlineGame) setLocalStatus(localSaveStatus)
+  }).catch(() => {
+    if (sequence === localSaveSequence && localSession === session && !onlineGame) {
+      setLocalStatus(localSaveStatus, 'Local history could not be saved to Supabase.')
+    }
+  })
+}
+
+function localTurnFinished(cpuMoved = false) {
+  cpuNextTurnAt = cpuMoved ? performance.now() + LOCAL_CPU_TIMING.betweenTurnsDelayMs : 0
+  saveLocalHistory()
+  scheduleCpu()
+}
+
+function startLocalGame(initial: Board, seats: LocalSeats, id: string, saved?: LocalGameState) {
+  const savedTurns = saved?.moves.map(move => ({ ...move, board: restoreOnlineBoard(move.board_after) })) ?? []
+  online.leaveGame()
+  cancelBoardPointer()
+  window.clearTimeout(cpuTimer)
+  clearCpuPreview()
+  cpuNextTurnAt = 0
+  stalledCpuBoard = null
+  localSession = { id, seats, owner: online.currentUserId() }
+  gameRules = DEFAULT_GAME_RULES
+  history.length = 0
+  history.push({ board: initial, cell: null })
+  moveHistoryRows?.replaceChildren()
+  lastMovePlayer = 0
+  lastMoveCell = null
+  lastMovePath = ''
+  for (const turn of savedTurns) {
+    const cell = addMoveCell(turn.player)
+    if (cell) cell.textContent = turn.notation
+    history.push({ board: turn.board, cell })
+  }
+  if (moveHistoryRows && !moveHistoryRows.rows.length) {
+    const row = moveHistoryRows.insertRow()
+    for (const _ of PIECE_COLORS) row.insertCell()
+  }
+  viewedTurn = history.length - 1
+  board = history[viewedTurn].board
+  currentPlayer = saved?.current_player ?? 1
+  select(null)
+  renderBoard()
+  updatePlayerNames(null)
+  updateHistoryPosition()
+  updateTurnIndicator()
+  if (moveHistoryList) moveHistoryList.scrollTop = moveHistoryList.scrollHeight
+  setLocalStatus(localSaveStatus)
+  if (!saved) saveLocalHistory()
+  scheduleCpu()
+}
+
+const localDialog = document.querySelector<HTMLDialogElement>('#local-game-dialog')!
+const localForm = document.querySelector<HTMLFormElement>('#local-game-form')!
+const savedSection = document.querySelector<HTMLElement>('#local-game-saves')!
+const savedList = document.querySelector<HTMLElement>('#local-game-save-list')!
+const loadStatus = document.querySelector<HTMLElement>('#local-game-load-status')!
+const saveDate = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+let saveListRequest = 0
+
+async function showLocalSaves() {
+  const request = ++saveListRequest
+  const owner = online.currentUserId()
+  savedSection.hidden = true
+  savedList.replaceChildren()
+  setLocalStatus(loadStatus)
+  if (!owner) return
+  try {
+    const saves = await online.listLocalGames()
+    if (request !== saveListRequest || !localDialog.open || online.currentUserId() !== owner) return
+    savedSection.hidden = !saves.length
+    for (const save of saves) {
+      const row = document.createElement('li')
+      const resume = document.createElement('button')
+      resume.type = 'button'
+      resume.className = 'export-action'
+      resume.textContent = `Resume ${saveDate.format(new Date(save.updated_at))} · ${save.turn_number} ${save.turn_number === 1 ? 'move' : 'moves'}`
+      resume.addEventListener('click', async () => {
+        resume.disabled = true
+        try {
+          const state = await online.loadLocalGame(save.id)
+          if (request !== saveListRequest || !localDialog.open || online.currentUserId() !== owner) return
+          if (state?.version !== 1 || state.seats?.length !== 3 ||
+              state.seats.some(seat => seat !== 'human' && seat !== 'cpu') ||
+              ![1, 2, 3].includes(state.current_player) || !Array.isArray(state.moves) ||
+              state.moves.some(move => ![1, 2, 3].includes(move.player) || typeof move.notation !== 'string')) {
+            throw new Error('Invalid local save.')
+          }
+          startLocalGame(restoreOnlineBoard(state.initial_board), state.seats, save.id, state)
+          localDialog.close()
+        } catch {
+          setLocalStatus(loadStatus, 'Could not resume this game.')
+        } finally {
+          resume.disabled = false
+        }
+      })
+      row.append(resume)
+      savedList.append(row)
+    }
+  } catch {
+    if (request === saveListRequest && localDialog.open && online.currentUserId() === owner) {
+      savedSection.hidden = false
+      setLocalStatus(loadStatus, 'Could not load your saved games.')
+    }
+  }
+}
+
+document.querySelector('#public-lobby-local')?.addEventListener('click', () => {
+  document.querySelector<HTMLDialogElement>('#online-dialog')?.close()
+  localForm.reset()
+  localDialog.showModal()
+  void showLocalSaves()
+})
+
+localForm.addEventListener('submit', event => {
+  event.preventDefault()
+  const fields = new FormData(localForm)
+  const seats = [1, 2, 3].map(seat => fields.get(`local-seat-${seat}`) === 'cpu' ? 'cpu' : 'human') as LocalSeats
+  const initial = createBoard(grid)
+  startLocalGame(fields.has('random-start') ? randomizeStartingPositions(initial) : initial, seats, crypto.randomUUID())
+  localDialog.close()
+})
+
+document.addEventListener('close', scheduleCpu, true)
