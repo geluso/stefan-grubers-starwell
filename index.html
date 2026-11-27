@@ -17,15 +17,24 @@
                 </a>
                 <button type="button" id="new-game-open" class="export-action new-game-button" aria-haspopup="dialog">New Game</button>
             </header>
+            <section class="players-panel" aria-labelledby="players-title">
+                <h2 id="players-title">Players</h2>
+                <ol id="player-roster">
+                    <li><span class="move-player-color" aria-hidden="true"></span><span>Player 1</span></li>
+                    <li><span class="move-player-color" aria-hidden="true"></span><span>Player 2</span></li>
+                    <li><span class="move-player-color" aria-hidden="true"></span><span>Player 3</span></li>
+                </ol>
+                <p id="observer-count" hidden><span aria-hidden="true">👁</span> <span id="observer-label"></span></p>
+            </section>
             <section class="move-history" aria-labelledby="move-history-title">
                 <h2 id="move-history-title">Moves</h2>
                 <div class="move-history-list">
                     <table aria-labelledby="move-history-title">
                         <thead>
                             <tr>
-                                <th scope="col"><span class="move-player-color" aria-hidden="true"></span>Player 1</th>
-                                <th scope="col"><span class="move-player-color" aria-hidden="true"></span>Player 2</th>
-                                <th scope="col"><span class="move-player-color" aria-hidden="true"></span>Player 3</th>
+                                <th scope="col"><span class="move-player-color" aria-hidden="true"></span><span class="move-player-name">Player 1</span></th>
+                                <th scope="col"><span class="move-player-color" aria-hidden="true"></span><span class="move-player-name">Player 2</span></th>
+                                <th scope="col"><span class="move-player-color" aria-hidden="true"></span><span class="move-player-name">Player 3</span></th>
                             </tr>
                         </thead>
                         <tbody id="move-history-rows"><tr><td></td><td></td><td></td></tr></tbody>
@@ -34,6 +43,7 @@
                 <p id="history-position" class="history-position" aria-live="polite" title="Left and right step through turns. Up goes to the start. Down returns to the live game." hidden></p>
                 <div class="online-controls">
                     <button type="button" id="online-finish" class="export-action" hidden>Finish move</button>
+                    <button type="button" id="online-stop-watching" class="export-action" hidden>Stop watching</button>
                     <span id="online-turn" role="status"></span>
                 </div>
                 <button type="button" id="export-game-state" class="export-action export-game-state">Export</button>
@@ -55,17 +65,6 @@
                 Credit to <a href="https://stefangruber.com/games-in-development/">Starwell</a> by Stefan Gruber
             </footer>
         </aside>
-        <dialog id="new-game-dialog" class="export-dialog new-game-dialog" aria-labelledby="new-game-title">
-            <header class="export-dialog-header">
-                <h2 id="new-game-title">New Game</h2>
-                <form method="dialog"><button class="export-action">Close</button></form>
-            </header>
-            <div class="new-game-options">
-                <a class="export-action new-game-option" href="./">Local Game</a>
-                <button type="button" data-online-mode="join" class="export-action new-game-option">Join Online Game</button>
-                <button type="button" data-online-mode="create" class="export-action new-game-option">Create Online Game</button>
-            </div>
-        </dialog>
         <dialog id="game-state-dialog" class="export-dialog" aria-labelledby="export-title">
             <header class="export-dialog-header">
                 <h2 id="export-title">Export game state</h2>
@@ -110,9 +109,9 @@
             </div>
             <p id="export-status" class="export-status" role="status"></p>
         </dialog>
-        <dialog id="online-dialog" class="export-dialog online-dialog" aria-labelledby="online-title">
+        <dialog id="online-dialog" class="export-dialog online-dialog lobby-dialog" aria-labelledby="online-title">
             <header class="export-dialog-header">
-                <h2 id="online-title">Sign in to play online</h2>
+                <h2 id="online-title">Online Lobby</h2>
                 <form method="dialog"><button class="export-action">Close</button></form>
             </header>
             <form id="online-login" hidden>
@@ -125,6 +124,7 @@
                     </button>
                 </div>
             </form>
+            <p id="online-status" role="status" hidden></p>
             <div id="online-account" hidden>
                 <form id="online-profile">
                     <label for="online-display-name">Display name</label>
@@ -148,13 +148,7 @@
                             <span class="online-spinner" aria-hidden="true"></span>
                         </button>
                     </form>
-                    <form id="online-join">
-                        <label for="online-game-link">Game link</label>
-                        <div class="online-inline-fields">
-                            <input id="online-game-link" name="invite" type="text" required>
-                            <button class="export-action">Join Online Game</button>
-                        </div>
-                    </form>
+                    <button type="button" id="online-invited" class="export-action" hidden>Join invited game</button>
                 </section>
                 <section id="online-room" hidden aria-label="Game room">
                     <ol id="online-seats"></ol>
@@ -162,7 +156,32 @@
                     <button type="button" id="online-offline" class="export-action">Back to local game</button>
                 </section>
             </div>
-            <p id="online-status" role="status"></p>
+            <section id="public-lobby" aria-labelledby="public-lobby-title" hidden>
+                <div class="public-lobby-header">
+                    <h3 id="public-lobby-title">Public games</h3>
+                    <button type="button" id="public-lobby-refresh" class="export-action">Refresh</button>
+                </div>
+                <p id="public-lobby-status" role="status" hidden></p>
+                <div id="public-games-table" class="public-games-scroll" hidden>
+                    <table class="public-games-table" aria-labelledby="public-lobby-title">
+                        <thead>
+                            <tr>
+                                <th scope="col">Created at</th>
+                                <th scope="col">Player 1</th>
+                                <th scope="col">Player 2</th>
+                                <th scope="col">Player 3</th>
+                                <th scope="col">Watch</th>
+                            </tr>
+                        </thead>
+                        <tbody id="public-game-list"></tbody>
+                    </table>
+                </div>
+                <button type="button" id="public-lobby-more" class="export-action" hidden>Load more</button>
+            </section>
+            <footer id="public-lobby-footer" class="public-lobby-footer">
+                <a href="./" class="export-action">Create Local Game</a>
+                <button type="button" id="public-lobby-create" class="export-action">Create Online Game</button>
+            </footer>
         </dialog>
         <dialog id="game-invite-dialog" class="export-dialog online-dialog" aria-labelledby="game-invite-title">
             <header class="export-dialog-header">

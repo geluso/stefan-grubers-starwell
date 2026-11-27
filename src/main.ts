@@ -190,6 +190,8 @@ const moveHistoryRows = document.querySelector<HTMLTableSectionElement>('#move-h
 const moveHistoryList = document.querySelector<HTMLElement>('.move-history-list')
 const historyPosition = document.querySelector<HTMLElement>('#history-position')
 const playerHeaders = document.querySelectorAll('.move-history th')
+const playerNames = document.querySelectorAll('.move-player-name')
+const playerRoster = document.querySelectorAll('#player-roster li span:last-child')
 let lastMovePlayer = 0
 let lastMoveCell: HTMLTableCellElement | null = null
 let lastMovePath = ''
@@ -535,9 +537,15 @@ function renderBoard() {
 }
 
 function updateOnlineBoard(next: OnlineGame | null) {
+  playerRoster.forEach((label, index) => {
+    const fallback = `Player ${index + 1}`
+    const name = next?.players.find(player => player.seat === index + 1)?.name
+    label.textContent = name ?? (next ? 'Open seat' : fallback)
+    playerNames[index].textContent = name ?? fallback
+  })
   const savedLocalGame = localGame
   const sameRoom = next?.id === onlineGame?.id
-  if (sameRoom && next?.revision === onlineGame?.revision) return
+  if (sameRoom && next?.revision === onlineGame?.revision && next?.seat === onlineGame?.seat) return
   cancelBoardPointer()
 
   if (next && !onlineGame) {
@@ -593,20 +601,11 @@ function updateOnlineBoard(next: OnlineGame | null) {
 }
 
 const online = bindOnlinePlay(updateOnlineBoard)
-const newGameDialog = document.querySelector<HTMLDialogElement>('#new-game-dialog')!
-document.querySelector('#new-game-open')?.addEventListener('click', () => newGameDialog.showModal())
-for (const button of newGameDialog.querySelectorAll<HTMLButtonElement>('[data-online-mode]')) {
-  const mode = button.dataset.onlineMode
-  if (mode !== 'create' && mode !== 'join') continue
-  button.addEventListener('click', () => {
-    newGameDialog.close()
-    online.openLobby(mode)
-  })
-}
+document.querySelector('#new-game-open')?.addEventListener('click', online.openLobby)
 
 async function submitOnlineMove(path: string[]) {
   const game = onlineGame
-  if (!game || onlineSaving) return
+  if (!game || game.seat === null || onlineSaving) return
   onlineSaving = true
   finishOnline.hidden = true
   select(null)

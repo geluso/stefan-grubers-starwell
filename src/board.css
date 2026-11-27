@@ -171,6 +171,7 @@ html[data-pieces-palette="alternate"] .hex-piece[data-army="purple"] {
     fill: var(--player-3-color);
 }
 
+.players-panel,
 .move-history {
     flex: none;
     display: flex;
@@ -180,9 +181,36 @@ html[data-pieces-palette="alternate"] .hex-piece[data-army="purple"] {
     font: 13px/1.4 system-ui, sans-serif;
 }
 
+.players-panel h2,
 .move-history h2 {
     margin: 0 0 8px;
     font-size: 15px;
+}
+
+.players-panel ol {
+    display: grid;
+    gap: 5px;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+
+.players-panel li {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    overflow-wrap: anywhere;
+}
+
+.players-panel li .move-player-color {
+    flex: none;
+    width: 12px;
+    height: 12px;
+}
+
+#observer-count {
+    margin: 6px 0 0;
+    color: #d8c8e6;
 }
 
 .move-history-list {
@@ -220,6 +248,7 @@ html[data-pieces-palette="alternate"] .hex-piece[data-army="purple"] {
     background: #181224;
     color: #d8c8e6;
     font-size: 11px;
+    overflow-wrap: anywhere;
 }
 
 .move-history th[aria-current="true"] {
@@ -238,9 +267,9 @@ html[data-pieces-palette="alternate"] .hex-piece[data-army="purple"] {
     vertical-align: -1px;
 }
 
-.move-history th:nth-child(1) { --player-color: var(--player-1-color); }
-.move-history th:nth-child(2) { --player-color: var(--player-2-color); }
-.move-history th:nth-child(3) { --player-color: var(--player-3-color); }
+:is(.move-history th, .players-panel li):nth-child(1) { --player-color: var(--player-1-color); }
+:is(.move-history th, .players-panel li):nth-child(2) { --player-color: var(--player-2-color); }
+:is(.move-history th, .players-panel li):nth-child(3) { --player-color: var(--player-3-color); }
 
 .move-history td {
     font: 11px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
@@ -524,27 +553,6 @@ html[data-pieces-palette="alternate"] .hex-piece[data-army="purple"] {
     font-size: 16px;
 }
 
-.new-game-dialog {
-    width: min(24rem, calc(100% - 24px));
-}
-
-.new-game-options {
-    display: grid;
-    gap: 8px;
-}
-
-.new-game-option {
-    display: grid;
-    min-height: 52px;
-    box-sizing: border-box;
-    place-items: center;
-    padding: 10px 14px;
-    background: #281d37;
-    font-size: 18px;
-    text-align: center;
-    text-decoration: none;
-}
-
 .online-controls {
     display: none;
     gap: .45rem;
@@ -560,6 +568,10 @@ html[data-pieces-palette="alternate"] .hex-piece[data-army="purple"] {
 
 .online-dialog {
     width: min(28rem, calc(100% - 2rem));
+}
+
+.lobby-dialog {
+    width: min(56rem, calc(100% - 24px));
 }
 
 .online-dialog form:not([method="dialog"]), .online-dialog section {
@@ -663,4 +675,84 @@ html[data-pieces-palette="alternate"] .hex-piece[data-army="purple"] {
 .online-dialog [role="status"] {
     color: #dfd8f2;
     overflow-wrap: anywhere;
+}
+
+.public-lobby-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.public-games-scroll {
+    max-height: 44dvh;
+    overflow: auto;
+    margin: 8px 0;
+    border: 1px solid #4b3e5d;
+    border-radius: 8px;
+}
+
+.public-games-table {
+    width: 100%;
+    border-spacing: 0;
+    table-layout: fixed;
+}
+
+.public-games-table :is(th, td) {
+    padding: 8px;
+    border-block-end: 1px solid #4b3e5d;
+    overflow-wrap: anywhere;
+    text-align: left;
+}
+
+.public-games-table th {
+    position: sticky;
+    top: 0;
+    background: #241a32;
+}
+
+.public-games-table th:first-child {
+    width: 26%;
+}
+
+.public-games-table :is(th, td):last-child {
+    width: 4rem;
+    text-align: center;
+}
+
+.public-games-table tr:last-child td {
+    border-block-end: 0;
+}
+
+.public-lobby-footer {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding-block-start: 12px;
+    border-block-start: 1px solid #4b3e5d;
+}
+
+.public-lobby-footer[hidden] {
+    display: none;
+}
+
+.public-lobby-footer .export-action {
+    display: grid;
+    min-height: 44px;
+    box-sizing: border-box;
+    place-items: center;
+    text-align: center;
+    text-decoration: none;
+}
+
+@media (max-width: 520px) {
+    .public-games-table :is(th, td),
+    .public-games-table button {
+        padding: 5px;
+        font-size: 11px;
+    }
+
+    .public-games-table :is(th, td):last-child {
+        width: 3.15rem;
+    }
 }

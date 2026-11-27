@@ -26,12 +26,14 @@ const checkPage = String.raw`<!doctype html>
           button.click();
           const gradient = frame.getComputedStyle(button, '::before').backgroundImage;
           const swatch = [...new Set(gradient.match(/rgb\([^)]*\)/g) ?? [])];
-          const headers = [...board.querySelectorAll('.move-player-color')]
+          const headers = [...board.querySelectorAll('.move-history .move-player-color')]
+            .map(square => frame.getComputedStyle(square).backgroundColor);
+          const roster = [...board.querySelectorAll('.players-panel .move-player-color')]
             .map(square => frame.getComputedStyle(square).backgroundColor);
           const pieces = armies.map(army => frame.getComputedStyle(
             board.querySelector('.hex-piece[data-army="' + army + '"]')).fill);
-          if (swatch.length !== 3 || String(swatch) !== String(headers) || String(swatch) !== String(pieces)) {
-            throw new Error(palette + ' palette differs across the swatch, move headers, and board');
+          if (swatch.length !== 3 || String(swatch) !== String(headers) || String(swatch) !== String(roster) || String(swatch) !== String(pieces)) {
+            throw new Error(palette + ' palette differs across the swatch, player roster, move headers, and board');
           }
           return String(swatch);
         });
@@ -187,19 +189,16 @@ const historyPage = `<!doctype html>
         verify(!board.querySelector('.online-controls button:not([hidden])'), 'The Moves panel should start without an online button');
         const newGame = board.querySelector('#new-game-open');
         newGame.click();
-        const options = [...board.querySelectorAll('.new-game-option')];
-        verify(options.map(option => option.textContent.trim()).join(',') === 'Local Game,Join Online Game,Create Online Game',
-          'The New Game menu should include all three game options');
-        const menuHeader = board.querySelector('#new-game-dialog .export-dialog-header').getBoundingClientRect();
-        verify(options.every((option, index) => {
-          const bounds = option.getBoundingClientRect();
-          return Math.abs(bounds.width - menuHeader.width) < 1 && bounds.height <= 56 &&
-            (index === 0 || bounds.top > options[index - 1].getBoundingClientRect().bottom);
-        }), 'Game options should stack as compact, full-width buttons');
-        options[1].click();
         const signIn = board.querySelector('#online-dialog');
         verify(signIn.open && !signIn.querySelector('#online-login').hidden &&
-          signIn.querySelector('input[type="email"]') === board.activeElement, 'Join Online Game should open a focused email sign-in form');
+          signIn.querySelector('input[type="email"]') === board.activeElement, 'New Game should open the lobby with the email input focused');
+        const columns = [...signIn.querySelectorAll('.public-games-table th')];
+        verify(columns.map(column => column.textContent.trim()).join(',') === 'Created at,Player 1,Player 2,Player 3,Watch',
+          'The lobby should have a creation date, three seat columns, and a watch column');
+        const [local, online] = signIn.querySelectorAll('#public-lobby-footer .export-action');
+        verify(local.textContent.trim() === 'Create Local Game' && online.textContent.trim() === 'Create Online Game' &&
+          Math.abs(local.getBoundingClientRect().width - online.getBoundingClientRect().width) < 1,
+          'The two create buttons should share the footer equally');
         signIn.close();
         verify(exportedMoves() === '[]', 'A new game should have no exported moves');
         for (const name of ['E2', 'H3', 'E7', 'F7', 'K10', 'E10']) click(name);

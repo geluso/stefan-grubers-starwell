@@ -29,12 +29,24 @@ Deno.serve(async request => {
   if (request.method !== 'POST') return fail('Use POST.', 405)
 
   try {
+    const input = await request.json().catch(() => null)
+    if (!input || typeof input !== 'object') return fail('Invalid request.', 400)
+    if (input.action === 'list') {
+      const offset = input.offset ?? 0
+      if (!Number.isInteger(offset) || offset < 0 || offset > 2147483647) return fail('Invalid page.', 400)
+      const games = await rpc('starwell_list_games', { page_start: offset })
+      return reply({ games: games.slice(0, 50), hasMore: games.length > 50 })
+    }
+    if (input.action === 'observe') {
+      const room = input.room
+      if (typeof room !== 'string' || !roomId.test(room)) return fail('Enter a valid game link.', 400)
+      const game = await rpc('starwell_read', { room, actor: null })
+      return game ? reply(game) : fail('This game is unavailable to observers.', 404)
+    }
     const token = request.headers.get('authorization')?.match(/^Bearer (\S+)$/i)?.[1]
     if (!token) return fail('Sign in to play online.', 401)
     const { data: { user }, error } = await db.auth.getUser(token)
     if (error || !user) return fail('Sign in to play online.', 401)
-    const input = await request.json().catch(() => null)
-    if (!input || typeof input !== 'object') return fail('Invalid request.', 400)
     const actor = user.id
 
     if (input.action === 'create' || input.action === 'join') {
@@ -53,7 +65,11 @@ Deno.serve(async request => {
     const room = input.room
     if (typeof room !== 'string' || !roomId.test(room)) return fail('Enter a valid invite link.', 400)
     if (input.action === 'join') {
-      if (!await rpc('starwell_join', { room, actor })) return fail('Game is full or unavailable.', 409)
+      const seat = input.seat ?? null
+      if (seat !== null && (!Number.isInteger(seat) || seat < 1 || seat > 3)) return fail('Choose a valid seat.', 400)
+      if (!await rpc('starwell_join', { room, actor, preferred_seat: seat })) {
+        return fail(seat ? 'That seat is unavailable. Refresh the lobby to choose another.' : 'Game is full or unavailable.', 409)
+      }
     } else if (input.action !== 'read' && input.action !== 'move') {
       return fail('Unknown action.', 400)
     }

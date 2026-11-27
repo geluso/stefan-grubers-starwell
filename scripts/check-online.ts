@@ -10,8 +10,11 @@ const options = { auth: { persistSession: false, autoRefreshToken: false } }
 const admin = createClient(url, secret, options)
 const users: string[] = []
 let room: string | undefined
+let privateRoom: string | undefined
 let channel: RealtimeChannel | undefined
 let listener: ReturnType<typeof createClient> | undefined
+const database = (sql: string) => Bun.spawn(['docker', 'exec', 'supabase_db_starwell', 'psql', '-U', 'postgres',
+  '-v', 'ON_ERROR_STOP=1', '-q', '-c', sql], { stdout: 'ignore', stderr: 'inherit' }).exited
 const createPlayer = async (seat: number) => {
   const email = `starwell-${crypto.randomUUID()}@example.com`
   const password = crypto.randomUUID()
@@ -28,6 +31,7 @@ const createPlayer = async (seat: number) => {
 
 try {
   const player1 = await createPlayer(1)
+  const guest = createClient(url, key, options)
   const [player2, player3, outsider] = await Promise.all([createPlayer(2), createPlayer(3), createPlayer(4)])
   const call = async (client: typeof player1, action: string, input: object = {}, status = 200) => {
     const { data, error } = await client.functions.invoke('starwell', { body: { action, room, ...input } })
@@ -40,23 +44,42 @@ try {
   room = created.id
   assert.equal(created.status, 'waiting')
   assert.equal(created.seat, 1)
+  assert.equal(created.visibility, 'public')
+  const listing = await call(guest, 'list')
+  const listed = listing.games.find((game: { id: string }) => game.id === room)
+  assert.ok(listed)
+  assert.ok(Number.isFinite(Date.parse(listed.created_at)))
+  assert.deepEqual(listed.seats, ['Tester 1', null, null])
+  const watched = await call(guest, 'observe')
+  assert.equal(watched.seat, null)
+  assert.deepEqual(watched.players, [{ seat: 1, name: 'Tester 1' }])
+  assert.equal((await call(player1, 'observe')).seat, null)
   await call(outsider, 'read', {}, 404)
   const unauthorized = await player1.rpc('starwell_join', { room, actor: users[0] })
   assert.ok(unauthorized.error)
-  assert.deepEqual((await outsider.from('games').select('id').eq('id', room)).data, [])
+  assert.deepEqual((await guest.from('games').select('id').eq('id', room)).data, [{ id: room }])
+  await call(guest, 'move', { path: ['E2', 'H3'], revision: 0 }, 401)
   await call(player1, 'move', { path: ['E2', 'H3'], revision: 0 }, 409)
-  assert.equal((await call(player2, 'join')).seat, 2)
-  assert.equal((await call(player3, 'join')).status, 'active')
+  const thirdSeat = await call(player3, 'join', { seat: 3 })
+  assert.equal(thirdSeat.seat, 3)
+  assert.equal(thirdSeat.status, 'waiting')
+  assert.deepEqual((await call(guest, 'list')).games.find((game: { id: string }) => game.id === room).seats,
+    ['Tester 1', null, 'Tester 3'])
+  await call(outsider, 'join', { seat: 3 }, 409)
+  const secondSeat = await call(player2, 'join')
+  assert.equal(secondSeat.seat, 2)
+  assert.equal(secondSeat.status, 'active')
   assert.equal((await call(player2, 'join')).seat, 2)
   await call(outsider, 'join', {}, 409)
+  await call(outsider, 'move', { path: ['E2', 'H3'], revision: 2 }, 404)
   await call(player2, 'move', { path: ['E7', 'F7'], revision: 2 }, 409)
   await call(player1, 'move', { path: ['E2', 'F6'], revision: 2 }, 422)
 
-  listener = player2
+  listener = guest
   const notification = Promise.withResolvers<number>()
   await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('Realtime subscription timed out.')), 8000)
-    channel = player2.channel(`test:${room}`, { config: { postgres_changes_options: { wait: true } } })
+    channel = guest.channel(`test:${room}`, { config: { postgres_changes_options: { wait: true } } })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${room}` }, message => {
         if (message.new.revision === 3) notification.resolve(message.new.revision)
       })
@@ -89,14 +112,20 @@ try {
   assert.equal(power.current_player, 2)
   assert.deepEqual((await call(player3, 'read')).board, power.board)
   assert.deepEqual((await call(player2, 'read')).moves, power.moves)
-  console.log('Three seats, access controls, turn validation, concurrent moves, Realtime, and persisted history passed.')
+  assert.deepEqual((await call(guest, 'observe')).moves, power.moves)
+
+  privateRoom = (await call(player1, 'create', { knightJump: 'long' })).id
+  assert.equal(await database(`update public.games set visibility = 'private' where id = '${privateRoom}';`), 0)
+  assert.ok(!(await call(guest, 'list')).games.some((game: { id: string }) => game.id === privateRoom))
+  assert.deepEqual((await guest.from('games').select('id').eq('id', privateRoom)).data, [])
+  await call(guest, 'observe', { room: privateRoom }, 404)
+  assert.equal((await call(player1, 'read', { room: privateRoom })).seat, 1)
+  console.log('Public lobby, spectator access, private visibility, turns, concurrent moves, Realtime, and history passed.')
 } finally {
   if (channel) await listener?.removeChannel(channel)
   listener?.realtime.disconnect()
-  if (room) {
-    // Service role can clear disposable integration-test rooms through the database.
-    await Bun.spawn(['docker', 'exec', 'supabase_db_starwell', 'psql', '-U', 'postgres', '-q', '-c',
-      `delete from public.games where id = '${room}';`], { stdout: 'ignore', stderr: 'inherit' }).exited
+  for (const id of [room, privateRoom]) {
+    if (id) await database(`delete from public.games where id = '${id}';`)
   }
   for (const id of users) await admin.auth.admin.deleteUser(id)
 }

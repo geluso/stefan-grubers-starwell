@@ -29,7 +29,7 @@ Upload the contents of `dist/` to your website. The generated `index.html` loads
 
 ## Online play
 
-Starwell uses Supabase for email sign-in, display names, invite-only rooms, and game history. DreamHost serves the frontend at `https://5tephen.com/starwell/`. Each room opens when all three seats are filled. The server checks turn order and move legality before saving each turn. Players can reload their invite link to resume.
+Starwell uses Supabase for email sign-in, display names, public rooms, and game history. DreamHost serves the frontend at `https://5tephen.com/starwell/`. Open **New Game** to browse the lobby, join an open seat, or watch a public game. Guests can watch the board and review moves. Seated players sign in to play, and the game begins when all three seats are filled. The server checks turn order and move legality before saving each turn. Players can reload their invite link to resume, and observers can share the watch link in their address bar.
 
 ### Run locally
 
