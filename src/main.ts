@@ -193,6 +193,21 @@ if (exportDialog && jsonPreview && asciiPreview && exportStatus) {
     }
   })
 
+  const isBackdrop = (event: MouseEvent) => {
+    if (event.target !== exportDialog) return false
+    const { left, right, top, bottom } = exportDialog.getBoundingClientRect()
+    return event.clientX < left || event.clientX >= right || event.clientY < top || event.clientY >= bottom
+  }
+
+  let pressedBackdrop = false
+  exportDialog.addEventListener('pointerdown', event => {
+    pressedBackdrop = isBackdrop(event)
+  })
+  exportDialog.addEventListener('click', event => {
+    if (pressedBackdrop && isBackdrop(event)) exportDialog.close()
+    pressedBackdrop = false
+  })
+
   for (const { name, preview, filename, type, section, lineNumbers } of formats) {
     if (lineNumbers) {
       preview.addEventListener('scroll', () => {
