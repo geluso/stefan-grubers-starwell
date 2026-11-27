@@ -23,7 +23,10 @@
             <div class="export-formats">
                 <section class="export-format" aria-labelledby="export-json-title">
                     <h3 id="export-json-title">JSON</h3>
-                    <textarea id="game-state-json" aria-labelledby="export-json-title" readonly wrap="off" spellcheck="false"></textarea>
+                    <div class="export-preview">
+                        <div class="export-line-gutter" aria-hidden="true"><pre></pre></div>
+                        <textarea id="game-state-json" aria-labelledby="export-json-title" readonly wrap="off" spellcheck="false"></textarea>
+                    </div>
                     <div class="export-actions">
                         <button type="button" class="export-action export-copy" aria-label="Copy JSON">Copy</button>
                         <button type="button" class="export-action export-download" aria-label="Download JSON">Download</button>
@@ -31,7 +34,10 @@
                 </section>
                 <section class="export-format" aria-labelledby="export-ascii-title">
                     <h3 id="export-ascii-title">ASCII</h3>
-                    <textarea id="game-state-ascii" aria-labelledby="export-ascii-title" readonly wrap="off" spellcheck="false"></textarea>
+                    <div class="export-preview export-preview-ascii">
+                        <div class="export-line-gutter" aria-hidden="true"><pre></pre></div>
+                        <textarea id="game-state-ascii" aria-labelledby="export-ascii-title" readonly wrap="off" spellcheck="false"></textarea>
+                    </div>
                     <div class="export-actions">
                         <button type="button" class="export-action export-copy" aria-label="Copy ASCII">Copy</button>
                         <button type="button" class="export-action export-download" aria-label="Download ASCII">Download</button>

@@ -168,22 +168,38 @@ const asciiPreview = document.querySelector<HTMLTextAreaElement>('#game-state-as
 const exportStatus = document.querySelector('#export-status')
 
 if (exportDialog && jsonPreview && asciiPreview && exportStatus) {
-  document.querySelector('#export-game-state')?.addEventListener('click', () => {
-    const snapshot = exportGameState(board)
-    jsonPreview.value = snapshot.json
-    asciiPreview.value = snapshot.ascii
-    exportStatus.textContent = ''
-    exportDialog.showModal()
-    jsonPreview.scrollTop = jsonPreview.scrollLeft = 0
-    asciiPreview.scrollTop = asciiPreview.scrollLeft = 0
+  const formats = ([
+    { key: 'json', name: 'JSON', preview: jsonPreview, filename: 'starwell-game-state.json', type: 'application/json' },
+    { key: 'ascii', name: 'ASCII', preview: asciiPreview, filename: 'starwell-game-state.txt', type: 'text/plain' },
+  ] as const).map(format => {
+    const section = format.preview.closest('.export-format')
+    const lineNumbers = section?.querySelector<HTMLPreElement>('.export-line-gutter pre')
+    return { ...format, section, lineNumbers }
   })
 
-  const formats = [
-    { name: 'JSON', preview: jsonPreview, filename: 'starwell-game-state.json', type: 'application/json' },
-    { name: 'ASCII', preview: asciiPreview, filename: 'starwell-game-state.txt', type: 'text/plain' },
-  ]
-  for (const { name, preview, filename, type } of formats) {
-    const section = preview.closest('.export-format')
+  document.querySelector('#export-game-state')?.addEventListener('click', () => {
+    const snapshot = exportGameState(board)
+    for (const { key, preview, lineNumbers } of formats) {
+      preview.value = snapshot[key]
+      if (lineNumbers) {
+        const lineCount = preview.value.trimEnd().split('\n').length
+        lineNumbers.textContent = Array.from({ length: lineCount }, (_, index) => index + 1).join('\n')
+        lineNumbers.style.transform = ''
+      }
+    }
+    exportStatus.textContent = ''
+    exportDialog.showModal()
+    for (const { preview } of formats) {
+      preview.scrollTop = preview.scrollLeft = 0
+    }
+  })
+
+  for (const { name, preview, filename, type, section, lineNumbers } of formats) {
+    if (lineNumbers) {
+      preview.addEventListener('scroll', () => {
+        lineNumbers.style.transform = `translateY(${-preview.scrollTop}px)`
+      })
+    }
     section?.querySelector('.export-copy')?.addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(preview.value)

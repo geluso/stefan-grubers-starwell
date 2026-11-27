@@ -38,7 +38,10 @@ export function exportGameState(board: Board): { json: string; ascii: string } {
   const frameWidth = width + 2
   const framedRows = [
     `+${'=[STARWELL-ASCII-V1]'.padEnd(frameWidth, '=')}+`,
-    ...rows.map(row => `| ${row.padEnd(width)} |`),
+    ...rows.map((row, index) => {
+      const side = index === BOARD_RADIUS ? 'X' : '|'
+      return `${side} ${row.padEnd(width)} ${side}`
+    }),
     `+${'='.repeat(frameWidth)}+`,
   ]
 

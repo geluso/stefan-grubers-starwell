@@ -28,7 +28,10 @@ test('JSON and ASCII encode the same pieces in cube coordinates', () => {
   })
   expect(lines[0]).toBe(`+=[STARWELL-ASCII-V1]${'='.repeat(24)}+`)
   expect(lines[12]).toBe(`+${'='.repeat(44)}+`)
-  expect(boardLines.every(line => line.length === 46 && line.startsWith('| ') && line.endsWith(' |'))).toBe(true)
+  expect(boardLines.every((line, index) => {
+    const side = index === 5 ? 'X' : '|'
+    return line.length === 46 && line.startsWith(`${side} `) && line.endsWith(` ${side}`)
+  })).toBe(true)
   expect(rows.map(row => row.trim().split(/\s+/).length)).toEqual([6, 7, 8, 9, 10, 11, 10, 9, 8, 7, 6])
   expect(rows[0]).toBe('          ..  ..  ..  ..  ..  k1')
   expect(rows[5]).toBe('..  ..  ..  ..  ..  ##  ..  ..  ..  ..  ..')
