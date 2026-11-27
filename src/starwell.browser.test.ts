@@ -185,6 +185,22 @@ const historyPage = `<!doctype html>
       try {
         verify(!position() && board.querySelector('#history-position').hidden, 'The history label should be hidden before the first turn');
         verify(!board.querySelector('.online-controls button:not([hidden])'), 'The Moves panel should start without an online button');
+        const newGame = board.querySelector('#new-game-open');
+        newGame.click();
+        const options = [...board.querySelectorAll('.new-game-option')];
+        verify(options.map(option => option.textContent.trim()).join(',') === 'Local Game,Join Online Game,Create Online Game',
+          'The New Game menu should include all three game options');
+        const menuHeader = board.querySelector('#new-game-dialog .export-dialog-header').getBoundingClientRect();
+        verify(options.every((option, index) => {
+          const bounds = option.getBoundingClientRect();
+          return Math.abs(bounds.width - menuHeader.width) < 1 && bounds.height <= 56 &&
+            (index === 0 || bounds.top > options[index - 1].getBoundingClientRect().bottom);
+        }), 'Game options should stack as compact, full-width buttons');
+        options[1].click();
+        const signIn = board.querySelector('#online-dialog');
+        verify(signIn.open && !signIn.querySelector('#online-login').hidden &&
+          signIn.querySelector('input[type="email"]') === board.activeElement, 'Join Online Game should open a focused email sign-in form');
+        signIn.close();
         verify(exportedMoves() === '[]', 'A new game should have no exported moves');
         for (const name of ['E2', 'H3', 'E7', 'F7', 'K10', 'E10']) click(name);
         verify(position() === 'Turn 3 of 3 · Live', 'Three turns should be recorded');

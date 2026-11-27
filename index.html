@@ -51,6 +51,9 @@
                     <button type="button" class="palette-button metallic-hexes" data-palette="metallic" data-tooltip="Metallic" aria-pressed="false" aria-label="Metallic hexes"></button>
                 </div>
             </div>
+            <footer class="game-credit">
+                Credit to <a href="https://stefangruber.com/games-in-development/">Starwell</a> by Stefan Gruber
+            </footer>
         </aside>
         <dialog id="new-game-dialog" class="export-dialog new-game-dialog" aria-labelledby="new-game-title">
             <header class="export-dialog-header">
@@ -59,7 +62,8 @@
             </header>
             <div class="new-game-options">
                 <a class="export-action new-game-option" href="./">Local Game</a>
-                <button type="button" id="new-game-online" class="export-action new-game-option">Online Game</button>
+                <button type="button" data-online-mode="join" class="export-action new-game-option">Join Online Game</button>
+                <button type="button" data-online-mode="create" class="export-action new-game-option">Create Online Game</button>
             </div>
         </dialog>
         <dialog id="game-state-dialog" class="export-dialog" aria-labelledby="export-title">
@@ -108,30 +112,48 @@
         </dialog>
         <dialog id="online-dialog" class="export-dialog online-dialog" aria-labelledby="online-title">
             <header class="export-dialog-header">
-                <h2 id="online-title">Online play</h2>
+                <h2 id="online-title">Sign in to play online</h2>
                 <form method="dialog"><button class="export-action">Close</button></form>
             </header>
             <form id="online-login" hidden>
-                <label>Email <input name="email" type="email" autocomplete="email" required></label>
-                <button class="export-action">Send sign-in link</button>
+                <label for="online-email">Email</label>
+                <div class="online-inline-fields">
+                    <input id="online-email" name="email" type="email" autocomplete="email" required autofocus>
+                    <button type="submit" class="export-action online-pending-button">
+                        <span>Send sign-in link</span>
+                        <span class="online-spinner" aria-hidden="true"></span>
+                    </button>
+                </div>
             </form>
             <div id="online-account" hidden>
                 <form id="online-profile">
-                    <label>Display name <input name="displayName" maxlength="40" required></label>
-                    <button class="export-action">Save name</button>
+                    <label for="online-display-name">Display name</label>
+                    <div class="online-inline-fields">
+                        <input id="online-display-name" name="displayName" maxlength="40" required>
+                        <button class="export-action">Save name</button>
+                    </div>
                 </form>
                 <section id="online-lobby">
                     <button type="button" id="online-current" class="export-action" hidden>Current game</button>
                     <form id="online-create">
-                        <label>Knight rule <select name="knightJump">
-                            <option value="long">Long jump</option>
-                            <option value="short">Short jump</option>
-                        </select></label>
-                        <button class="export-action">Create game</button>
+                        <fieldset class="online-invite-emails">
+                            <legend>Invite other players via email</legend>
+                            <label for="online-invite-first">First email (optional)</label>
+                            <input id="online-invite-first" name="inviteEmail" type="email" maxlength="254">
+                            <label for="online-invite-second">Second email (optional)</label>
+                            <input id="online-invite-second" name="inviteEmail" type="email" maxlength="254">
+                        </fieldset>
+                        <button type="submit" class="export-action online-pending-button online-create-button">
+                            <span>Create Game</span>
+                            <span class="online-spinner" aria-hidden="true"></span>
+                        </button>
                     </form>
                     <form id="online-join">
-                        <label>Invite link <input name="invite" type="text" required></label>
-                        <button class="export-action">Join game</button>
+                        <label for="online-game-link">Game link</label>
+                        <div class="online-inline-fields">
+                            <input id="online-game-link" name="invite" type="text" required>
+                            <button class="export-action">Join Online Game</button>
+                        </div>
                     </form>
                 </section>
                 <section id="online-room" hidden aria-label="Game room">
@@ -139,9 +161,21 @@
                     <button type="button" id="online-copy" class="export-action">Copy invite link</button>
                     <button type="button" id="online-offline" class="export-action">Back to local game</button>
                 </section>
-                <button type="button" id="online-logout" class="export-action">Sign out</button>
             </div>
             <p id="online-status" role="status"></p>
+        </dialog>
+        <dialog id="game-invite-dialog" class="export-dialog online-dialog" aria-labelledby="game-invite-title">
+            <header class="export-dialog-header">
+                <h2 id="game-invite-title">Game created</h2>
+                <form method="dialog"><button class="export-action">Close</button></form>
+            </header>
+            <label for="game-invite-link">Game link</label>
+            <div class="online-inline-fields">
+                <input id="game-invite-link" type="url" readonly>
+                <button type="button" id="game-invite-copy" class="export-action">Copy</button>
+            </div>
+            <p id="game-invite-copy-status" role="status" hidden></p>
+            <p id="game-invite-email-status" role="status" hidden></p>
         </dialog>
     </body>
 </html>

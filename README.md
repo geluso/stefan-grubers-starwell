@@ -50,7 +50,7 @@ bun run build
 python3 -m http.server 3000 --directory dist
 ```
 
-Open `http://localhost:3000/` and select **Online play**. Open the Mailpit URL shown by `npx supabase status` to retrieve local sign-in emails. Use three separate browser profiles to test an invite.
+Open `http://localhost:3000/` and select **New Game → Create Online Game**. Open the Mailpit URL shown by `npx supabase status` to retrieve local sign-in emails. Use three separate browser profiles to test an invite.
 
 Run the existing tests with `bun test`. To check the local multiplayer stack, run this in Bash or Zsh after starting Supabase.
 
@@ -74,7 +74,7 @@ bun scripts/check-online.ts
    npx supabase functions deploy starwell --no-verify-jwt --use-api
    ```
 
-3. Build the static frontend with the hosted project URL and its **publishable key**. The Edge Function reads its privileged key from Supabase at runtime.
+3. Run `bun run build` for the Starwell Supabase project. For a different project, override both the API URL and its **publishable key**. The Edge Function reads its privileged key from Supabase at runtime.
 
    ```sh
    STARWELL_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co \

@@ -268,6 +268,19 @@ html[data-pieces-palette="alternate"] .hex-piece[data-army="purple"] {
     font: 600 13px/1.2 system-ui, sans-serif;
 }
 
+.game-credit {
+    flex: none;
+    padding-block-start: 10px;
+    border-block-start: 1px solid #4b3e5d;
+    color: #c7b4d6;
+    font: 12px/1.4 system-ui, sans-serif;
+}
+
+.game-credit a {
+    color: #f1e8fa;
+    text-underline-offset: 2px;
+}
+
 .export-action {
     padding: 8px;
     border: 1px solid #4b3e5d;
@@ -302,6 +315,7 @@ html[data-pieces-palette="alternate"] .hex-piece[data-army="purple"] {
 }
 
 .game-home:focus-visible,
+.game-credit a:focus-visible,
 .export-action:focus-visible,
 .export-preview:has(textarea:focus-visible),
 .palette-button:focus-visible {
@@ -503,7 +517,7 @@ html[data-pieces-palette="alternate"] .hex-piece[data-army="purple"] {
 .wooden-hexes { --swatch: linear-gradient(90deg, var(--wood-brown) 33.33%, var(--wood-medium-brown) 33.33% 66.67%, var(--wood-light-brown) 66.67%); }
 
 .new-game-button {
-    width: min(100%, 280px);
+    width: min(100%, 16rem);
     min-height: 44px;
     border-color: #866a9d;
     background: #322043;
@@ -511,21 +525,20 @@ html[data-pieces-palette="alternate"] .hex-piece[data-army="purple"] {
 }
 
 .new-game-dialog {
-    width: min(38rem, calc(100% - 24px));
+    width: min(24rem, calc(100% - 24px));
 }
 
 .new-game-options {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
-    gap: 12px;
+    gap: 8px;
 }
 
 .new-game-option {
     display: grid;
-    min-height: 104px;
+    min-height: 52px;
     box-sizing: border-box;
     place-items: center;
-    padding: 16px;
+    padding: 10px 14px;
     background: #281d37;
     font-size: 18px;
     text-align: center;
@@ -561,7 +574,7 @@ html[data-pieces-palette="alternate"] .hex-piece[data-army="purple"] {
     margin-bottom: .4rem;
 }
 
-.online-dialog input, .online-dialog select {
+.online-dialog input {
     max-width: 100%;
     border: 1px solid #66617b;
     border-radius: .25rem;
@@ -569,6 +582,82 @@ html[data-pieces-palette="alternate"] .hex-piece[data-army="purple"] {
     color: inherit;
     background: #241f34;
     font: inherit;
+}
+
+.online-inline-fields {
+    display: flex;
+    gap: .5rem;
+}
+
+.online-inline-fields input {
+    flex: 1;
+    min-width: 0;
+}
+
+.online-inline-fields button {
+    flex: none;
+}
+
+.online-invite-emails {
+    min-inline-size: 0;
+    margin: 0 0 .65rem;
+    padding: .55rem .7rem .7rem;
+    border: 1px solid #4b3e5d;
+    border-radius: 8px;
+}
+
+.online-invite-emails input {
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.online-invite-emails input + label {
+    margin-block-start: .5rem;
+}
+
+.online-pending-button {
+    position: relative;
+    flex: none;
+    white-space: nowrap;
+}
+
+.online-create-button {
+    width: 100%;
+}
+
+.online-pending-button:disabled {
+    cursor: wait;
+}
+
+.online-pending-button:disabled span:not(.online-spinner) {
+    opacity: 0;
+}
+
+.online-spinner {
+    display: none;
+    position: absolute;
+    inset: 0;
+    width: .9rem;
+    height: .9rem;
+    margin: auto;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+}
+
+.online-pending-button:disabled .online-spinner {
+    display: block;
+    animation: online-spin .75s linear infinite;
+}
+
+@keyframes online-spin {
+    to { transform: rotate(1turn); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .online-pending-button:disabled .online-spinner {
+        animation: none;
+    }
 }
 
 .online-dialog [role="status"] {

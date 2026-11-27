@@ -595,10 +595,14 @@ function updateOnlineBoard(next: OnlineGame | null) {
 const online = bindOnlinePlay(updateOnlineBoard)
 const newGameDialog = document.querySelector<HTMLDialogElement>('#new-game-dialog')!
 document.querySelector('#new-game-open')?.addEventListener('click', () => newGameDialog.showModal())
-document.querySelector('#new-game-online')?.addEventListener('click', () => {
-  newGameDialog.close()
-  online.openLobby()
-})
+for (const button of newGameDialog.querySelectorAll<HTMLButtonElement>('[data-online-mode]')) {
+  const mode = button.dataset.onlineMode
+  if (mode !== 'create' && mode !== 'join') continue
+  button.addEventListener('click', () => {
+    newGameDialog.close()
+    online.openLobby(mode)
+  })
+}
 
 async function submitOnlineMove(path: string[]) {
   const game = onlineGame
