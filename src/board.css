@@ -1,0 +1,15 @@
+html {
+    background: black url('../assets/lunar-background.webp') right top / cover no-repeat;
+}
+
+.hex-tile {
+    shape-rendering: crispEdges;
+}
+
+.hex-coordinates {
+    visibility: hidden;
+}
+
+.hex-tile:hover ~ .hex-coordinates {
+    visibility: visible;
+}

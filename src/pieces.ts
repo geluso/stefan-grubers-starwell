@@ -1,6 +1,6 @@
 import { PIECE_WHITE, PIECE_PURPLE, PIECE_YELLOW } from "./color-map"
 
-export const NONE = { text: '', color: '' }
+export const NONE = { text: '', color: '' } as const
 export const KING = '♚'
 export const QUEEN = '♛'
 export const ROOK = '♜'
@@ -8,7 +8,12 @@ export const BISHOP = '♝'
 export const KNIGHT = '♞'
 export const PAWN = '♟'
 
-export const PIECE_MAP = {
+export type Piece = {
+  readonly text: typeof KING | typeof QUEEN | typeof ROOK | typeof BISHOP | typeof KNIGHT | typeof PAWN
+  readonly color: string
+}
+
+export const PIECE_MAP: Readonly<Record<string, Piece | typeof NONE | undefined>> = {
   // Ring 0
   '(0, 0, 0)': NONE,
   // Ring 1
