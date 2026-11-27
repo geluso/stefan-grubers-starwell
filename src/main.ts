@@ -1,10 +1,11 @@
 import { SVG } from '@svgdotjs/svg.js'
 import { defineHex, Grid, spiral, type CubeCoordinates, type Point } from 'honeycomb-grid'
 
-import { COLOR_MAP } from './color-map'
+import { COLOR_MAP, getPlayerNumber, PIECE_COLORS } from './color-map'
 import { exportGameState } from './game-state'
-import { BOARD_RADIUS, createBoard, getHexName, getKey, legalMoves, makeMove } from './moves'
-import type { Piece } from './pieces'
+import { BOARD_RADIUS, canDoubleJump, createBoard, getHexName, getKey, legalMoves, makeMove, previewDoubleJumps, type Board } from './moves'
+import { BISHOP, KING, KNIGHT, PAWN, QUEEN, ROOK, type Piece } from './pieces'
+import { canMoveOnTurn, playerAfterMove } from './turn-order'
 
 // you may want the origin to be the top left corner of a hex's bounding box
 // instead of its center (which is the default)
@@ -13,6 +14,9 @@ const center = { q: 0, r: 0 }
 const grid = new Grid(Hex, spiral({ start: center, radius: BOARD_RADIUS }))
 let board = createBoard(grid)
 let selected: CubeCoordinates | null = null
+let secondKnightJump = false
+let doubleJumpRoutes: ReadonlyMap<string, CubeCoordinates> = new Map()
+let currentPlayer = 1
 
 const draw = SVG().addTo('body').addClass('starwell-board').size('100%', '100%')
 const pieceFont = { size: 48, family: 'sans-serif' }
@@ -113,6 +117,16 @@ const renderSVG = (hex: InstanceType<typeof Hex>) => {
     .center(x, y)
     .attr('pointer-events', 'none')
 
+  const starPoints = Array.from({ length: 10 }, (_, index) => {
+    const angle = index * Math.PI / 5 - Math.PI / 2
+    const radius = index % 2 === 0 ? 10 : 4
+    return `${x + Math.cos(angle) * radius},${y + Math.sin(angle) * radius}`
+  })
+  tile.polygon(starPoints)
+    .addClass('hex-jump-star')
+    .fill('black')
+    .attr({ 'pointer-events': 'none', 'aria-hidden': 'true' })
+
   tile.path(captureMarkerPath(hexCorners, { x, y }))
     .addClass('hex-capture-marker')
     .fill('none')
@@ -148,6 +162,65 @@ const renderSVG = (hex: InstanceType<typeof Hex>) => {
 }
 
 const tiles = new Map(grid.toArray().map(hex => [getKey(hex), renderSVG(hex)]))
+
+const moveSymbols = { [PAWN]: 'P', [KNIGHT]: 'K', [BISHOP]: 'B', [ROOK]: 'R', [QUEEN]: 'Q', [KING]: 'Kg' }
+const moveHistoryRows = document.querySelector<HTMLTableSectionElement>('#move-history-rows')
+const moveHistoryList = document.querySelector<HTMLElement>('.move-history-list')
+const playerHeaders = document.querySelectorAll('.move-history th')
+const enforceTurns = document.querySelector<HTMLInputElement>('#enforce-turns')
+let lastMovePlayer = 0
+let lastMoveCell: HTMLTableCellElement | null = null
+
+function updateTurnIndicator() {
+  playerHeaders.forEach((header, index) => {
+    if (enforceTurns?.checked && index + 1 === currentPlayer) {
+      header.setAttribute('aria-current', 'true')
+    } else {
+      header.removeAttribute('aria-current')
+    }
+  })
+}
+
+function isPlayerTurn(piece: Piece): boolean {
+  return canMoveOnTurn(piece.color, currentPlayer, enforceTurns?.checked ?? false)
+}
+
+function updateTurnAfterMove(player: number, secondJumpPending = false) {
+  currentPlayer = playerAfterMove(player, secondJumpPending)
+  updateTurnIndicator()
+}
+
+enforceTurns?.addEventListener('change', () => {
+  const piece = selected && board.get(getKey(selected))?.piece
+  if (piece && !isPlayerTurn(piece)) select(null)
+  updateTurnIndicator()
+})
+updateTurnIndicator()
+
+function moveLeg(position: CubeCoordinates, beforeMove: Board): string {
+  const capture = beforeMove.get(getKey(position))?.piece
+  return `${capture ? 'x' : '-'}${getHexName(position.q, position.r)}`
+}
+
+function recordMove(piece: Piece, start: CubeCoordinates, route: string, continuing: boolean) {
+  if (!moveHistoryRows) return
+
+  if (continuing && lastMoveCell) {
+    lastMoveCell.textContent += route
+  } else {
+    const player = getPlayerNumber(piece.color)
+    let row = moveHistoryRows.rows[moveHistoryRows.rows.length - 1]
+    if (!row || player <= lastMovePlayer) {
+      row = moveHistoryRows.insertRow()
+      for (const _ of PIECE_COLORS) row.insertCell()
+    }
+    lastMoveCell = row.cells[player - 1]
+    lastMoveCell.textContent = `${moveSymbols[piece.text]}${player} ${getHexName(start.q, start.r)}${route}`
+    lastMovePlayer = player
+  }
+
+  if (moveHistoryList) moveHistoryList.scrollTop = moveHistoryList.scrollHeight
+}
 
 function downloadGameState(content: string, filename: string, type: string) {
   const file = new Blob([content], { type })
@@ -238,7 +311,7 @@ if (outlines) {
 
 for (const row of document.querySelectorAll<HTMLElement>('[data-palette-for]')) {
   const paletteAttribute = `data-${row.dataset.paletteFor}-palette`
-  const target = row.dataset.paletteFor === 'sky' ? document.documentElement : draw.node
+  const target = row.dataset.paletteFor === 'hexes' ? draw.node : document.documentElement
   const buttons = row.querySelectorAll<HTMLButtonElement>('button[data-palette]')
   const initialPalette = row.querySelector<HTMLButtonElement>('[aria-pressed="true"]')?.dataset.palette
   if (initialPalette) target.setAttribute(paletteAttribute, initialPalette)
@@ -254,37 +327,57 @@ for (const row of document.querySelectorAll<HTMLElement>('[data-palette-for]')) 
   }
 }
 
-function select(position: CubeCoordinates | null) {
-  selected = position
-  const destinations = new Set(position ? legalMoves(board, position).map(getKey) : [])
+function select(position: CubeCoordinates | null, continuingJump = false) {
+  const destinations = new Set(position ? legalMoves(board, position, continuingJump ? 'power' : 'normal').map(getKey) : [])
+  selected = continuingJump && !destinations.size ? null : position
+  secondKnightJump = continuingJump && selected !== null
+  const outerKnight = selected && !secondKnightJump && canDoubleJump(board, selected)
+  doubleJumpRoutes = selected && outerKnight ? previewDoubleJumps(board, selected) : new Map()
   for (const [key, { tile }] of tiles) {
-    if (destinations.has(key)) {
-      tile.attr('data-destination', board.get(key)?.piece ? 'capture' : 'move')
+    const doubleJump = doubleJumpRoutes.has(key)
+    if (destinations.has(key) || doubleJump) {
+      const capture = board.get(key)?.piece
+      const jump = secondKnightJump || doubleJump ? 'second' : outerKnight && !capture ? 'first' : null
+      tile.attr('data-destination', capture ? 'capture' : 'move')
+      tile.attr('data-knight-jump', jump)
     } else {
       tile.node.removeAttribute('data-destination')
+      tile.node.removeAttribute('data-knight-jump')
     }
   }
 }
 
 function handleClick(position: CubeCoordinates) {
   const key = getKey(position)
-  if (selected) {
-    const startKey = getKey(selected)
+  const startKey = selected && getKey(selected)
+  const piece = startKey && board.get(startKey)?.piece
+  if (selected && startKey && piece && isPlayerTurn(piece)) {
     if (startKey === key) {
+      if (secondKnightJump) updateTurnAfterMove(currentPlayer)
       select(null)
       return
     }
 
-    const next = makeMove(board, selected, position)
-    if (next) {
+    const via = doubleJumpRoutes.get(key)
+    const powerMove = via !== undefined || secondKnightJump
+    const afterFirst = via ? makeMove(board, selected, via, 'power') : board
+    const next = afterFirst && makeMove(afterFirst, via ?? selected, position, powerMove ? 'power' : 'normal')
+    if (next && afterFirst) {
+      const canContinue = !powerMove && !board.get(key)?.piece && canDoubleJump(board, selected)
+      const route = (via ? moveLeg(via, board) : '') + moveLeg(position, afterFirst)
+      recordMove(piece, selected, route, secondKnightJump)
       board = next
       tiles.get(startKey)?.renderPiece(null)
+      if (via) tiles.get(getKey(via))?.renderPiece(null)
       tiles.get(key)?.renderPiece(board.get(key)?.piece ?? null)
-      select(null)
+      select(canContinue ? position : null, canContinue)
+      updateTurnAfterMove(getPlayerNumber(piece.color), secondKnightJump)
       return
     }
   }
 
-  select(board.get(key)?.piece ? position : null)
+  if (secondKnightJump) updateTurnAfterMove(currentPlayer)
+  const target = board.get(key)?.piece
+  select(target && isPlayerTurn(target) ? position : null)
 }
 

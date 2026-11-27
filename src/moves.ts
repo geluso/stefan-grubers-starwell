@@ -9,6 +9,7 @@ type Cell = {
 
 export type Board = ReadonlyMap<string, Cell>
 export const BOARD_RADIUS = 5
+type MoveMode = 'normal' | 'power'
 
 // In order around a hex, so consecutive directions share a corner.
 const EDGE_STEPS: readonly CubeCoordinates[] = [
@@ -47,6 +48,12 @@ export function getHexName(q: number, r: number): string {
   const column = 'ABCDEFGHIJK'[q + BOARD_RADIUS]
   const row = BOARD_RADIUS - r + 1
   return `${column}${row}`
+}
+
+export function canDoubleJump(board: Board, start: CubeCoordinates): boolean {
+  const { q, r, s } = start
+  return Math.max(Math.abs(q), Math.abs(r), Math.abs(s)) === BOARD_RADIUS &&
+    board.get(getKey(start))?.piece?.text === KNIGHT
 }
 
 export function createBoard(positions: Iterable<CubeCoordinates>, setup = PIECE_MAP): Board {
@@ -102,21 +109,42 @@ function isInCheck(board: Board, color: string): boolean {
   return false
 }
 
-export function legalMoves(board: Board, start: CubeCoordinates): CubeCoordinates[] {
+export function legalMoves(board: Board, start: CubeCoordinates, mode: MoveMode = 'normal'): CubeCoordinates[] {
   const piece = board.get(getKey(start))?.piece
   if (!piece) return []
 
-  return movementSquares(board, start, piece).filter(end =>
-    !isInCheck(boardAfterMove(board, start, end, piece), piece.color),
-  )
+  return movementSquares(board, start, piece).filter(end => {
+    if (mode === 'power' && board.get(getKey(end))?.piece) return false
+    return !isInCheck(boardAfterMove(board, start, end, piece), piece.color)
+  })
 }
 
-export function makeMove(board: Board, start: CubeCoordinates, end: CubeCoordinates): Board | null {
+export function previewDoubleJumps(board: Board, start: CubeCoordinates): ReadonlyMap<string, CubeCoordinates> {
+  const routes = new Map<string, CubeCoordinates>()
+  const knight = board.get(getKey(start))?.piece
+  if (!knight || !canDoubleJump(board, start)) return routes
+
+  const firstLandings = legalMoves(board, start, 'power')
+  // Keep the first landing selectable as a single jump when either route can reach it.
+  const singleJumpKeys = new Set([getKey(start), ...firstLandings.map(getKey)])
+  for (const first of firstLandings) {
+    const afterFirst = boardAfterMove(board, start, first, knight)
+    for (const second of legalMoves(afterFirst, first, 'power')) {
+      const key = getKey(second)
+      if (!singleJumpKeys.has(key) && !routes.has(key)) {
+        routes.set(key, first)
+      }
+    }
+  }
+  return routes
+}
+
+export function makeMove(board: Board, start: CubeCoordinates, end: CubeCoordinates, mode: MoveMode = 'normal'): Board | null {
   const piece = board.get(getKey(start))?.piece
   if (!piece) return null
 
   const endKey = getKey(end)
-  const destination = legalMoves(board, start).find(square => getKey(square) === endKey)
+  const destination = legalMoves(board, start, mode).find(square => getKey(square) === endKey)
   if (!destination) return null
 
   return boardAfterMove(board, start, destination, piece)

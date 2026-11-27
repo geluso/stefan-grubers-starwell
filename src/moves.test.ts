@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { defineHex, Grid, spiral } from 'honeycomb-grid'
 
 import { PIECE_PURPLE, PIECE_WHITE, PIECE_YELLOW } from './color-map'
-import { createBoard, getKey, legalMoves, makeMove } from './moves'
+import { canDoubleJump, createBoard, getKey, legalMoves, makeMove, previewDoubleJumps } from './moves'
 import { BISHOP, KING, KNIGHT, PAWN, QUEEN, ROOK } from './pieces'
 
 const grid = new Grid(defineHex(), spiral({ start: { q: 0, r: 0 }, radius: 5 }))
@@ -141,4 +141,81 @@ test('knights can hop over the center hole and capture on the far side', () => {
   })
 
   expect(makeMove(board, start, landing)?.get(getKey(landing))?.piece?.text).toBe(KNIGHT)
+})
+
+test('only knights starting on the outer ring can take a second jump', () => {
+  const start = hex(0, 5)
+  const first = hex(1, 3)
+  const second = hex(2, 1)
+  const board = createBoard(grid, {
+    [getKey(start)]: { text: KNIGHT, color: PIECE_WHITE },
+  })
+
+  expect(canDoubleJump(board, start)).toBe(true)
+  expect(canDoubleJump(board, hex(-5, 5))).toBe(false)
+  expect(legalMoves(board, start).map(getKey)).not.toContain(getKey(second))
+
+  const afterFirst = makeMove(board, start, first, 'power')
+  expect(afterFirst?.get(getKey(first))?.piece?.text).toBe(KNIGHT)
+  expect(afterFirst && canDoubleJump(afterFirst, first)).toBe(false)
+  const afterSecond = afterFirst && makeMove(afterFirst, first, second, 'power')
+  expect(afterSecond?.get(getKey(first))?.piece).toBeNull()
+  expect(afterSecond?.get(getKey(second))?.piece).toEqual({ text: KNIGHT, color: PIECE_WHITE })
+})
+
+test('a knight power cannot capture on either jump', () => {
+  const start = hex(0, 5)
+  const first = hex(1, 3)
+  const second = hex(2, 1)
+  const setup = { [getKey(start)]: { text: KNIGHT, color: PIECE_WHITE } }
+  const firstOccupied = createBoard(grid, {
+    ...setup,
+    [getKey(first)]: { text: PAWN, color: PIECE_PURPLE },
+  })
+
+  expect(previewDoubleJumps(firstOccupied, start).has(getKey(second))).toBe(false)
+  expect(makeMove(firstOccupied, start, first, 'power')).toBeNull()
+  expect(makeMove(firstOccupied, start, first)?.get(getKey(first))?.piece?.text).toBe(KNIGHT)
+
+  const secondOccupied = createBoard(grid, {
+    ...setup,
+    [getKey(second)]: { text: PAWN, color: PIECE_YELLOW },
+  })
+  expect(previewDoubleJumps(secondOccupied, start).has(getKey(second))).toBe(false)
+  const afterFirst = makeMove(secondOccupied, start, first, 'power')
+  expect(afterFirst).not.toBeNull()
+  if (!afterFirst) return
+  expect(legalMoves(afterFirst, first, 'power').map(getKey)).not.toContain(getKey(second))
+  expect(makeMove(afterFirst, first, second, 'power')).toBeNull()
+})
+
+test('selecting a knight on F1 previews both single jumps and second-jump destinations', () => {
+  const edge = hex(0, 5)
+  const knight = hex(-1, 4)
+  const board = makeMove(createBoard(grid), knight, edge)
+  expect(board).not.toBeNull()
+  if (!board) return
+
+  expect(legalMoves(board, edge).map(getKey).sort()).toEqual([getKey(knight), getKey(hex(1, 3))].sort())
+  const routes = previewDoubleJumps(board, edge)
+  expect([...routes.keys()].sort()).toEqual([hex(0, 2), hex(2, 1), hex(3, 2)].map(getKey).sort())
+  const via = routes.get(getKey(hex(2, 1)))
+  expect(via && getKey(via)).toBe(getKey(hex(1, 3)))
+})
+
+test('an enemy knight can threaten the king with a single jump but its power cannot give check', () => {
+  const king = hex(2, 0)
+  const threatened = hex(2, 1)
+  const setup = {
+    [getKey(king)]: { text: KING, color: PIECE_WHITE },
+    [getKey(hex(0, 5))]: { text: KNIGHT, color: PIECE_PURPLE },
+  }
+  expect(makeMove(createBoard(grid, setup), king, threatened)).not.toBeNull()
+
+  const kingNearWall = hex(1, 2)
+  const nearBoard = createBoard(grid, {
+    [getKey(kingNearWall)]: { text: KING, color: PIECE_WHITE },
+    [getKey(hex(0, 5))]: { text: KNIGHT, color: PIECE_PURPLE },
+  })
+  expect(makeMove(nearBoard, kingNearWall, hex(1, 3))).toBeNull()
 })

@@ -5,6 +5,12 @@ export const PIECE_YELLOW = 'orange'
 // Player IDs start with the bottom army in the default view: red, black, green.
 export const PIECE_COLORS = [PIECE_YELLOW, PIECE_PURPLE, PIECE_WHITE]
 
+export function getPlayerNumber(color: string): number {
+  const player = PIECE_COLORS.indexOf(color) + 1
+  if (player === 0) throw new Error(`Unknown player color: ${color}`)
+  return player
+}
+
 // Tile backgrounds
 const WHITE = 'white'
 const BLUE = 'dodgerblue'

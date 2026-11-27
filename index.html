@@ -10,8 +10,31 @@
     </head>
     <body>
         <header class="game-header">
-            <img class="game-title" src="./assets/starwell-title.webp" width="1000" height="334" alt="Starwell — 3-player Hex Chess">
+            <a class="game-home" href="./" aria-label="Starwell home — start a new game">
+                <img class="game-title" src="./assets/starwell-title.webp" width="1000" height="334" alt="Starwell — 3-player Hex Chess">
+            </a>
         </header>
+        <aside class="move-history" aria-labelledby="move-history-title">
+            <div class="move-history-header">
+                <h2 id="move-history-title">Moves</h2>
+                <label class="turn-toggle">
+                    Enforce turns:
+                    <input type="checkbox" id="enforce-turns" checked>
+                </label>
+            </div>
+            <div class="move-history-list">
+                <table aria-labelledby="move-history-title">
+                    <thead>
+                        <tr>
+                            <th scope="col"><span class="move-player-color" aria-hidden="true"></span>Player 1</th>
+                            <th scope="col"><span class="move-player-color" aria-hidden="true"></span>Player 2</th>
+                            <th scope="col"><span class="move-player-color" aria-hidden="true"></span>Player 3</th>
+                        </tr>
+                    </thead>
+                    <tbody id="move-history-rows"><tr><td></td><td></td><td></td></tr></tbody>
+                </table>
+            </div>
+        </aside>
         <button type="button" id="export-game-state" class="export-game-state">export game state</button>
         <dialog id="game-state-dialog" class="export-dialog" aria-labelledby="export-title">
             <header class="export-dialog-header">
@@ -53,8 +76,8 @@
             </label>
             <div class="palette-row" role="group" aria-labelledby="pieces-label" data-palette-for="pieces">
                 <span id="pieces-label">Pieces</span>
-                <button type="button" class="palette-button alternate-pieces" data-palette="alternate" data-tooltip="Black, red, and green" aria-pressed="true" aria-label="Black, red, and green pieces"></button>
-                <button type="button" class="palette-button original-pieces" data-palette="original" data-tooltip="Purple, orange, and white" aria-pressed="false" aria-label="Purple, orange, and white pieces"></button>
+                <button type="button" class="palette-button alternate-pieces" data-palette="alternate" data-tooltip="Red, black, and green" aria-pressed="true" aria-label="Red, black, and green pieces"></button>
+                <button type="button" class="palette-button original-pieces" data-palette="original" data-tooltip="Orange, purple, and white" aria-pressed="false" aria-label="Orange, purple, and white pieces"></button>
             </div>
             <div class="palette-row" role="group" aria-labelledby="hexes-label" data-palette-for="hexes">
                 <span id="hexes-label">Hexes</span>
