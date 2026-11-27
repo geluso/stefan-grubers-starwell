@@ -14,8 +14,6 @@ export type Piece = {
 }
 
 export const PIECE_MAP: Readonly<Record<string, Piece | typeof NONE | undefined>> = {
-  // Ring 0
-  '(0, 0, 0)': NONE,
   // Ring 1
   '(1, -1, 0)': NONE,
   '(1, 0, -1)': NONE,

@@ -10,16 +10,17 @@ const hex = (q: number, r: number) => ({ q, r, s: -q - r })
 const center = hex(0, 0)
 
 test('an absolutely pinned piece can keep the line blocked or capture the attacker', () => {
-  const start = hex(1, 0)
-  const attacker = hex(4, 0)
+  const king = hex(1, -2)
+  const start = hex(2, -2)
+  const attacker = hex(5, -2)
   const board = createBoard(grid, {
-    [getKey(center)]: { text: KING, color: PIECE_WHITE },
+    [getKey(king)]: { text: KING, color: PIECE_WHITE },
     [getKey(start)]: { text: ROOK, color: PIECE_WHITE },
     [getKey(attacker)]: { text: ROOK, color: PIECE_PURPLE },
   })
 
-  expect(legalMoves(board, start).map(getKey)).toEqual([hex(2, 0), hex(3, 0), attacker].map(getKey))
-  expect(makeMove(board, start, hex(1, 1))).toBeNull()
+  expect(legalMoves(board, start).map(getKey)).toEqual([hex(3, -2), hex(4, -2), attacker].map(getKey))
+  expect(makeMove(board, start, hex(2, -1))).toBeNull()
 
   const next = makeMove(board, start, attacker)
   expect(next?.get(getKey(start))?.piece).toBeNull()
@@ -27,26 +28,28 @@ test('an absolutely pinned piece can keep the line blocked or capture the attack
   expect(board.get(getKey(attacker))?.piece?.color).toBe(PIECE_PURPLE)
 })
 
-test('king safety checks threats from both opponents and rejects king captures', () => {
-  const start = hex(1, 0)
-  const enemyKing = hex(-1, 0)
+test('king safety checks threats from both opponents and rejects a capture on a defended hex', () => {
+  const king = hex(1, -2)
+  const start = hex(2, -2)
+  const enemyKing = hex(0, -2)
   const board = createBoard(grid, {
-    [getKey(center)]: { text: KING, color: PIECE_WHITE },
+    [getKey(king)]: { text: KING, color: PIECE_WHITE },
     [getKey(start)]: { text: ROOK, color: PIECE_WHITE },
-    [getKey(hex(4, 0))]: { text: ROOK, color: PIECE_PURPLE },
-    [getKey(hex(0, 4))]: { text: ROOK, color: PIECE_YELLOW },
+    [getKey(hex(5, -2))]: { text: ROOK, color: PIECE_PURPLE },
+    [getKey(hex(1, 2))]: { text: ROOK, color: PIECE_YELLOW },
     [getKey(enemyKing)]: { text: KING, color: PIECE_PURPLE },
+    [getKey(hex(0, -3))]: { text: PAWN, color: PIECE_PURPLE },
   })
 
   expect(legalMoves(board, start)).toEqual([])
-  expect(legalMoves(board, center).map(getKey)).toEqual([getKey(hex(1, -1))])
-  expect(makeMove(board, center, enemyKing)).toBeNull()
+  expect(legalMoves(board, king).map(getKey)).toEqual([getKey(hex(2, -3))])
+  expect(makeMove(board, king, enemyKing)).toBeNull()
 })
 
 test('a pawn can move or capture one edge step in every direction', () => {
-  const start = hex(0, 0)
-  const friendly = hex(-1, 1)
-  const enemy = hex(0, -1)
+  const start = hex(0, 2)
+  const friendly = hex(-1, 3)
+  const enemy = hex(0, 1)
   const board = createBoard(grid, {
     [getKey(start)]: { text: PAWN, color: PIECE_WHITE },
     [getKey(friendly)]: { text: PAWN, color: PIECE_WHITE },
@@ -54,34 +57,88 @@ test('a pawn can move or capture one edge step in every direction', () => {
   })
 
   expect(legalMoves(board, start).map(getKey)).toEqual(
-    [hex(1, -1), hex(1, 0), hex(0, 1), hex(-1, 0), enemy].map(getKey),
+    [hex(1, 1), hex(1, 2), hex(0, 3), hex(-1, 2), enemy].map(getKey),
   )
 })
 
-test('the knight hops over edge neighbors, and the bishop stops at a piece on its corner ray', () => {
-  const firstCorner = hex(2, -1)
-  const secondCorner = hex(4, -2)
+test('a pawn can capture a king when the move keeps its own king safe', () => {
+  const start = hex(2, -2)
+  const target = hex(2, -1)
   const setup = {
-    [getKey(hex(1, 0))]: { text: PAWN, color: PIECE_WHITE },
-    [getKey(hex(1, -1))]: { text: PAWN, color: PIECE_WHITE },
+    [getKey(hex(1, -2))]: { text: KING, color: PIECE_WHITE },
+    [getKey(start)]: { text: PAWN, color: PIECE_WHITE },
+    [getKey(target)]: { text: KING, color: PIECE_PURPLE },
+  }
+  const board = createBoard(grid, setup)
+
+  expect(legalMoves(board, start).map(getKey)).toContain(getKey(target))
+  const next = makeMove(board, start, target)
+  expect(next?.get(getKey(start))?.piece).toBeNull()
+  expect(next?.get(getKey(target))?.piece).toEqual({ text: PAWN, color: PIECE_WHITE })
+
+  const pinned = createBoard(grid, {
+    ...setup,
+    [getKey(hex(5, -2))]: { text: ROOK, color: PIECE_YELLOW },
+  })
+  expect(makeMove(pinned, start, target)).toBeNull()
+})
+
+test('the knight hops over edge neighbors, and the bishop stops at a piece on its corner ray', () => {
+  const start = hex(0, 2)
+  const firstCorner = hex(2, 1)
+  const secondCorner = hex(4, 0)
+  const setup = {
+    [getKey(hex(1, 2))]: { text: PAWN, color: PIECE_WHITE },
+    [getKey(hex(1, 1))]: { text: PAWN, color: PIECE_WHITE },
     [getKey(firstCorner)]: { text: PAWN, color: PIECE_PURPLE },
   }
 
-  const knight = createBoard(grid, { ...setup, [getKey(center)]: { text: KNIGHT, color: PIECE_WHITE } })
-  const knightMoves = legalMoves(knight, center).map(getKey)
+  const knight = createBoard(grid, { ...setup, [getKey(start)]: { text: KNIGHT, color: PIECE_WHITE } })
+  const knightMoves = legalMoves(knight, start).map(getKey)
   expect(new Set(knightMoves).size).toBe(6)
   expect(knightMoves).toContain(getKey(firstCorner))
 
-  const bishop = createBoard(grid, { ...setup, [getKey(center)]: { text: BISHOP, color: PIECE_WHITE } })
-  const bishopMoves = legalMoves(bishop, center).map(getKey)
+  const bishop = createBoard(grid, { ...setup, [getKey(start)]: { text: BISHOP, color: PIECE_WHITE } })
+  const bishopMoves = legalMoves(bishop, start).map(getKey)
   expect(bishopMoves).toContain(getKey(firstCorner))
   expect(bishopMoves).not.toContain(getKey(secondCorner))
 })
 
 test('a queen combines edge and corner rays', () => {
+  const start = hex(0, 2)
   function movesFor(text: typeof ROOK | typeof BISHOP | typeof QUEEN) {
-    return legalMoves(createBoard(grid, { [getKey(center)]: { text, color: PIECE_WHITE } }), center).map(getKey)
+    return legalMoves(createBoard(grid, { [getKey(start)]: { text, color: PIECE_WHITE } }), start).map(getKey)
   }
 
   expect(movesFor(QUEEN)).toEqual([...movesFor(ROOK), ...movesFor(BISHOP)])
+})
+
+test('the center hole rejects landings and blocks sliding moves', () => {
+  const near = hex(1, 0)
+  const across = hex(-1, 0)
+  const rookStart = hex(2, 0)
+  const rookBoard = createBoard(grid, {
+    [getKey(rookStart)]: { text: ROOK, color: PIECE_WHITE },
+    [getKey(across)]: { text: ROOK, color: PIECE_PURPLE },
+  })
+
+  expect(legalMoves(rookBoard, rookStart).map(getKey)).toContain(getKey(near))
+  expect(makeMove(rookBoard, rookStart, center)).toBeNull()
+  expect(makeMove(rookBoard, rookStart, across)).toBeNull()
+
+  const pawnBoard = createBoard(grid, { [getKey(near)]: { text: PAWN, color: PIECE_WHITE } })
+  expect(pawnBoard.has(getKey(center))).toBe(false)
+  expect(makeMove(pawnBoard, near, center)).toBeNull()
+})
+
+test('knights can hop over the center hole and capture on the far side', () => {
+  const start = hex(1, 0)
+  const landing = hex(-1, 1)
+  const board = createBoard(grid, {
+    [getKey(start)]: { text: KNIGHT, color: PIECE_WHITE },
+    [getKey(hex(0, 1))]: { text: PAWN, color: PIECE_WHITE },
+    [getKey(landing)]: { text: PAWN, color: PIECE_PURPLE },
+  })
+
+  expect(makeMove(board, start, landing)?.get(getKey(landing))?.piece?.text).toBe(KNIGHT)
 })

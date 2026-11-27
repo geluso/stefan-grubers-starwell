@@ -1,15 +1,333 @@
 html {
-    background: black url('../assets/lunar-background.webp') right top / cover no-repeat;
+    --piece-black: #000;
+    --piece-red: #dc2626;
+    --piece-green: #15803d;
+    --hex-light-gray: #d3d3d3;
+    --hex-dark-gray: #555;
+    --wood-brown: #784d35;
+    --wood-medium-brown: #b27b50;
+    --wood-light-brown: #edc998;
+    --nebula-sky: url('../assets/green-nebula-background.webp');
+    --lunar-sky: url('../assets/lunar-background.webp');
+    background: black var(--nebula-sky) right top / cover no-repeat;
+}
+
+html[data-sky-palette="lunar"] {
+    background-image: var(--lunar-sky);
+}
+
+body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    height: 100vh;
+    height: 100dvh;
+    margin: 0;
+}
+
+.game-header {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    padding: 8px 14px 0;
+}
+
+.game-title {
+    display: block;
+    width: clamp(172px, 28vw, 280px);
+    max-width: 100%;
+    height: auto;
+}
+
+.starwell-board {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    min-width: 0;
+    min-height: 0;
 }
 
 .hex-tile {
     shape-rendering: crispEdges;
 }
 
-.hex-coordinates {
+.hex-coordinates,
+.hex-center-star {
     visibility: hidden;
 }
 
-.hex-tile:hover ~ .hex-coordinates {
+.hex-tile:hover ~ :is(.hex-coordinates, .hex-center-star) {
     visibility: visible;
 }
+
+.hex-piece:not(:empty) ~ .hex-coordinates,
+[data-destination="move"] > .hex-coordinates {
+    fill: white;
+    stroke: #181224;
+    stroke-width: 2;
+    paint-order: stroke fill;
+}
+
+.hex-move-dot,
+.hex-capture-marker {
+    display: none;
+}
+
+[data-destination="move"] > .hex-move-dot,
+[data-destination="capture"] > .hex-capture-marker {
+    display: inline;
+}
+
+.starwell-board[data-hexes-palette="metallic"] {
+    --hex-light: white;
+    --hex-middle: var(--hex-light-gray);
+    --hex-dark: var(--hex-dark-gray);
+}
+
+.starwell-board[data-hexes-palette="wooden"] {
+    --hex-light: var(--wood-light-brown);
+    --hex-middle: var(--wood-medium-brown);
+    --hex-dark: var(--wood-brown);
+}
+
+.starwell-board:is([data-hexes-palette="metallic"], [data-hexes-palette="wooden"]) .hex-tile[fill="hotpink"] {
+    fill: var(--hex-middle);
+}
+
+.starwell-board:is([data-hexes-palette="metallic"], [data-hexes-palette="wooden"]) .hex-tile[fill="white"] {
+    fill: var(--hex-light);
+}
+
+.starwell-board:is([data-hexes-palette="metallic"], [data-hexes-palette="wooden"]) .hex-tile[fill="dodgerblue"] {
+    fill: var(--hex-dark);
+}
+
+.starwell-board:is([data-hexes-palette="metallic"], [data-hexes-palette="wooden"]) .hex-tile[fill="dodgerblue"] ~ .hex-coordinates {
+    fill: white;
+}
+
+.hex-tile[fill="transparent"] {
+    pointer-events: all;
+}
+
+.hex-piece {
+    stroke: var(--piece-outline, black);
+}
+
+.piece-outlines-hidden .hex-piece {
+    stroke: none;
+}
+
+.starwell-board[data-pieces-palette="alternate"] .hex-piece[data-army="purple"] {
+    fill: var(--piece-black);
+    --piece-outline: white;
+}
+
+.starwell-board[data-pieces-palette="alternate"] .hex-piece[data-army="orange"] {
+    fill: var(--piece-red);
+}
+
+.starwell-board[data-pieces-palette="alternate"] .hex-piece[data-army="white"] {
+    fill: var(--piece-green);
+}
+
+.palette-panel {
+    grid-column: 2;
+    grid-row: 3;
+    justify-self: end;
+    display: grid;
+    gap: 4px;
+    margin: 8px 12px 12px;
+    padding: 8px 10px;
+    border: 1px solid #4b3e5d;
+    border-radius: 12px;
+    background: #181224f2;
+    color: #f1e8fa;
+    font: 600 13px/1.2 system-ui, sans-serif;
+}
+
+.export-game-state,
+.export-action {
+    padding: 8px;
+    border: 1px solid #4b3e5d;
+    border-radius: 8px;
+    background: #181224f2;
+    color: #f1e8fa;
+    font: 600 12px/1.2 system-ui, sans-serif;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+}
+
+.export-game-state {
+    grid-column: 1;
+    grid-row: 3;
+    place-self: end start;
+    max-width: calc(100% - 12px);
+    margin: 8px 0 12px 12px;
+}
+
+.export-game-state:hover,
+.export-action:hover {
+    background: #4b365e;
+}
+
+.export-game-state:focus-visible,
+.export-action:focus-visible,
+.export-format textarea:focus-visible,
+.palette-button:focus-visible {
+    outline: 2px solid white;
+    outline-offset: 2px;
+}
+
+.export-dialog {
+    box-sizing: border-box;
+    width: min(880px, calc(100% - 24px));
+    max-height: calc(100dvh - 24px);
+    padding: clamp(12px, 3vw, 24px);
+    border: 1px solid #625071;
+    border-radius: 14px;
+    background: #181224;
+    color: #f1e8fa;
+    box-shadow: 0 18px 60px #0009;
+    font: 14px/1.4 system-ui, sans-serif;
+}
+
+.export-dialog::backdrop {
+    background: #07050cbb;
+}
+
+.export-dialog-header,
+.export-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.export-dialog-header {
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.export-dialog h2,
+.export-dialog h3 {
+    margin: 0;
+}
+
+.export-formats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+    gap: 16px;
+}
+
+.export-format {
+    display: grid;
+    min-width: 0;
+    gap: 8px;
+}
+
+.export-format textarea {
+    box-sizing: border-box;
+    width: 100%;
+    height: 224px;
+    padding: 10px;
+    border: 1px solid #4b3e5d;
+    border-radius: 8px;
+    background: #0f0a18;
+    color: #f1e8fa;
+    font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+    resize: none;
+}
+
+#game-state-ascii {
+    font-size: clamp(8.5px, 2.58vw, 12px);
+    line-height: 1.28;
+}
+
+.export-actions {
+    justify-content: end;
+}
+
+.export-status {
+    min-height: 1.4em;
+    margin: 10px 0 0;
+    color: #debcff;
+}
+
+.palette-row {
+    display: grid;
+    grid-template-columns: 80px repeat(3, 36px);
+    align-items: center;
+    gap: 5px;
+}
+
+.piece-outlines {
+    min-height: 28px;
+    cursor: pointer;
+}
+
+.piece-outlines input {
+    justify-self: center;
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    accent-color: #c797ed;
+    cursor: pointer;
+}
+
+.palette-button {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 34px;
+    padding: 3px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: transparent;
+    cursor: pointer;
+}
+
+.palette-button::before {
+    content: '';
+    width: 100%;
+    height: 16px;
+    border-radius: 4px;
+    background: var(--swatch);
+}
+
+.palette-button::after {
+    position: absolute;
+    z-index: 1;
+    inset-inline-end: 0;
+    bottom: calc(100% + 6px);
+    width: max-content;
+    padding: 5px 8px;
+    border: 1px solid #4b3e5d;
+    border-radius: 6px;
+    background: #181224;
+    color: #f1e8fa;
+    content: attr(data-tooltip);
+    font: 500 12px/1.2 system-ui, sans-serif;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.palette-button:hover::after,
+.palette-button:focus-visible::after {
+    visibility: visible;
+}
+
+.palette-button:hover {
+    background: #ffffff18;
+}
+
+.palette-button[aria-pressed="true"] {
+    border-color: #debcff;
+    background: #4b365e;
+}
+
+.original-pieces { --swatch: linear-gradient(90deg, purple 33.33%, orange 33.33% 66.67%, white 66.67%); }
+.alternate-pieces { --swatch: linear-gradient(90deg, var(--piece-black) 33.33%, var(--piece-red) 33.33% 66.67%, var(--piece-green) 66.67%); }
+.trans-hexes { --swatch: linear-gradient(90deg, hotpink 33.33%, dodgerblue 33.33% 66.67%, white 66.67%); }
+.metallic-hexes { --swatch: linear-gradient(90deg, white 33.33%, var(--hex-light-gray) 33.33% 66.67%, var(--hex-dark-gray) 66.67%); }
+.wooden-hexes { --swatch: linear-gradient(90deg, var(--wood-brown) 33.33%, var(--wood-medium-brown) 33.33% 66.67%, var(--wood-light-brown) 66.67%); }
+.nebula-sky { --swatch: var(--nebula-sky) right top / 180% auto no-repeat; }
+.lunar-sky { --swatch: var(--lunar-sky) right top / 500% auto no-repeat; }

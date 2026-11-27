@@ -1,10 +1,66 @@
-<html>
+<!doctype html>
+<html lang="en">
     <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>Starwell</title>
         <link rel="icon" type="image/svg+xml" href="./favicon.svg">
         <link rel="stylesheet" href="./src/board.css">
         <script type="module" src="./src/main.ts"></script>
     </head>
     <body>
+        <header class="game-header">
+            <img class="game-title" src="./assets/starwell-title.webp" width="1000" height="334" alt="Starwell — 3-player Hex Chess">
+        </header>
+        <button type="button" id="export-game-state" class="export-game-state">export game state</button>
+        <dialog id="game-state-dialog" class="export-dialog" aria-labelledby="export-title">
+            <header class="export-dialog-header">
+                <h2 id="export-title">Export game state</h2>
+                <form method="dialog">
+                    <button type="submit" class="export-action" autofocus>Close</button>
+                </form>
+            </header>
+            <div class="export-formats">
+                <section class="export-format" aria-labelledby="export-json-title">
+                    <h3 id="export-json-title">JSON</h3>
+                    <textarea id="game-state-json" aria-labelledby="export-json-title" readonly wrap="off" spellcheck="false"></textarea>
+                    <div class="export-actions">
+                        <button type="button" class="export-action export-copy" aria-label="Copy JSON">Copy</button>
+                        <button type="button" class="export-action export-download" aria-label="Download JSON">Download</button>
+                    </div>
+                </section>
+                <section class="export-format" aria-labelledby="export-ascii-title">
+                    <h3 id="export-ascii-title">ASCII</h3>
+                    <textarea id="game-state-ascii" aria-labelledby="export-ascii-title" readonly wrap="off" spellcheck="false"></textarea>
+                    <div class="export-actions">
+                        <button type="button" class="export-action export-copy" aria-label="Copy ASCII">Copy</button>
+                        <button type="button" class="export-action export-download" aria-label="Download ASCII">Download</button>
+                    </div>
+                </section>
+            </div>
+            <p id="export-status" class="export-status" role="status"></p>
+        </dialog>
+        <div class="palette-panel">
+            <label class="palette-row piece-outlines">
+                <span>Outlines</span>
+                <input type="checkbox" id="piece-outlines" checked>
+            </label>
+            <div class="palette-row" role="group" aria-labelledby="pieces-label" data-palette-for="pieces">
+                <span id="pieces-label">Pieces</span>
+                <button type="button" class="palette-button alternate-pieces" data-palette="alternate" data-tooltip="Black, red, and green" aria-pressed="true" aria-label="Black, red, and green pieces"></button>
+                <button type="button" class="palette-button original-pieces" data-palette="original" data-tooltip="Purple, orange, and white" aria-pressed="false" aria-label="Purple, orange, and white pieces"></button>
+            </div>
+            <div class="palette-row" role="group" aria-labelledby="hexes-label" data-palette-for="hexes">
+                <span id="hexes-label">Hexes</span>
+                <button type="button" class="palette-button wooden-hexes" data-palette="wooden" data-tooltip="Wooden" aria-pressed="true" aria-label="Wooden hexes"></button>
+                <button type="button" class="palette-button trans-hexes" data-palette="trans" data-tooltip="Trans" aria-pressed="false" aria-label="Trans hexes"></button>
+                <button type="button" class="palette-button metallic-hexes" data-palette="metallic" data-tooltip="Metallic" aria-pressed="false" aria-label="Metallic hexes"></button>
+            </div>
+            <div class="palette-row" role="group" aria-labelledby="background-label" data-palette-for="sky">
+                <span id="background-label">Background</span>
+                <button type="button" class="palette-button nebula-sky" data-palette="nebula" data-tooltip="Green Nebula" aria-pressed="true" aria-label="Green Nebula background"></button>
+                <button type="button" class="palette-button lunar-sky" data-palette="lunar" data-tooltip="Lunar" aria-pressed="false" aria-label="Lunar background"></button>
+            </div>
+        </div>
     </body>
 </html>

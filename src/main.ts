@@ -1,20 +1,24 @@
 import { SVG } from '@svgdotjs/svg.js'
-import { defineHex, Grid, spiral, type CubeCoordinates } from 'honeycomb-grid'
+import { defineHex, Grid, spiral, type CubeCoordinates, type Point } from 'honeycomb-grid'
 
 import { COLOR_MAP } from './color-map'
-import { createBoard, getKey, legalMoves, makeMove } from './moves'
+import { exportGameState } from './game-state'
+import { BOARD_RADIUS, createBoard, getKey, legalMoves, makeMove } from './moves'
 import type { Piece } from './pieces'
 
 // you may want the origin to be the top left corner of a hex's bounding box
 // instead of its center (which is the default)
 const Hex = defineHex({ dimensions: 30, origin: 'topLeft' })
 const center = { q: 0, r: 0 }
-const grid = new Grid(Hex, spiral({ start: center, radius: 5 }))
+const grid = new Grid(Hex, spiral({ start: center, radius: BOARD_RADIUS }))
 let board = createBoard(grid)
 let selected: CubeCoordinates | null = null
 
-const draw = SVG().addTo('body').size('100%', '100%')
+const draw = SVG().addTo('body').addClass('starwell-board').size('100%', '100%')
 const pieceFont = { size: 48, family: 'sans-serif' }
+const edgeLabelFont = { size: 8, family: 'sans-serif', weight: 600 }
+const edgeLabelColor = '#e4e4e4'
+const edgeLabelOffset = 8
 const pieceMetrics = document.createElement('canvas').getContext('2d')
 
 if (pieceMetrics) {
@@ -29,53 +33,104 @@ const ys = corners.map(point => point.y)
 const left = Math.min(...xs)
 const top = Math.min(...ys)
 const padding = 2
+const rowLabelGutter = 24
+const columnLabelGutter = 16
 
 draw.viewbox(
-  left - padding,
-  top - padding,
-  Math.max(...xs) - left + padding * 2,
-  Math.max(...ys) - top + padding * 2,
+  left - padding - rowLabelGutter,
+  top - padding - columnLabelGutter,
+  Math.max(...xs) - left + (padding + rowLabelGutter) * 2,
+  Math.max(...ys) - top + (padding + columnLabelGutter) * 2,
 )
+
+function pointBetween(start: Point, end: Point, fraction: number): Point {
+  return {
+    x: start.x + (end.x - start.x) * fraction,
+    y: start.y + (end.y - start.y) * fraction,
+  }
+}
+
+function captureMarkerPath(corners: Point[], center: Point): string {
+  const inset = corners.map(corner => pointBetween(center, corner, 0.84))
+  return inset.map((corner, index) => {
+    const previous = inset[(index + inset.length - 1) % inset.length]
+    const next = inset[(index + 1) % inset.length]
+    const start = pointBetween(corner, previous, 0.2)
+    const end = pointBetween(corner, next, 0.2)
+    return `M ${start.x} ${start.y} L ${corner.x} ${corner.y} L ${end.x} ${end.y}`
+  }).join(' ')
+}
 
 const renderSVG = (hex: InstanceType<typeof Hex>) => {
   const key = getKey(hex)
   const color = COLOR_MAP[key as keyof typeof COLOR_MAP]
+  const hexCorners = hex.corners
   const tile = draw.group()
+  const playable = board.has(key)
+  const row = BOARD_RADIUS - hex.r + 1
+  const column = 'ABCDEFGHIJK'[hex.q + BOARD_RADIUS]
 
   const polygon = tile
-    .polygon(hex.corners.map(({ x, y }) => `${x},${y}`))
+    .polygon(hexCorners.map(({ x, y }) => `${x},${y}`))
     .addClass('hex-tile')
     .fill(color)
 
-  polygon.on('click', () => handleClick(hex))
+  if (playable) polygon.on('click', () => handleClick(hex))
 
   const x = polygon.cx()
   const y = polygon.cy()
 
+  if (hex.q === -BOARD_RADIUS || hex.s === BOARD_RADIUS) {
+    const leftEdge = Math.min(...hexCorners.map(corner => corner.x))
+    tile.plain(String(row))
+      .addClass('hex-row-number')
+      .font(edgeLabelFont)
+      .fill(edgeLabelColor)
+      .center(leftEdge - edgeLabelOffset, y)
+      .attr({ 'pointer-events': 'none', 'aria-hidden': 'true' })
+  }
+
+  if (hex.r === BOARD_RADIUS || hex.s === -BOARD_RADIUS) {
+    const [, lowerRight, bottom] = hexCorners
+    const midpoint = pointBetween(lowerRight, bottom, 0.5)
+    const distance = Math.hypot(midpoint.x - x, midpoint.y - y)
+    const label = pointBetween({ x, y }, midpoint, 1 + edgeLabelOffset / distance)
+    tile.plain(column)
+      .addClass('hex-column-letter')
+      .font(edgeLabelFont)
+      .fill(edgeLabelColor)
+      .center(label.x, label.y)
+      .attr({ 'pointer-events': 'none', 'aria-hidden': 'true' })
+  }
+
   const pieceLabel = tile.plain('')
     .addClass('hex-piece')
     .font(pieceFont)
-    .stroke('black')
     .attr('pointer-events', 'none')
 
-  tile.plain(`${hex.q}, ${hex.r}, ${hex.s}`)
-    .addClass('hex-coordinates')
-    .font({ size: 10, family: 'sans-serif' })
-    .fill('black')
-    .center(x, y + 23)
-    .attr('pointer-events', 'none')
-
-  const moveDot = tile.circle(11)
+  tile.circle(11)
     .addClass('hex-move-dot')
     .fill('#222')
-    .stroke({ color: 'white', width: 2 })
+    .center(x, y)
     .attr('pointer-events', 'none')
-    .hide()
+
+  tile.path(captureMarkerPath(hexCorners, { x, y }))
+    .addClass('hex-capture-marker')
+    .fill('none')
+    .stroke({ color: 'black', width: 2, linecap: 'round', linejoin: 'round' })
+    .attr('pointer-events', 'none')
+
+  tile.plain(playable ? `${column}${row}` : '★')
+    .addClass(playable ? 'hex-coordinates' : 'hex-center-star')
+    .font({ size: playable ? 10 : 28, family: 'sans-serif' })
+    .fill(playable ? 'black' : '#ffe34c')
+    .center(x, y)
+    .attr('pointer-events', 'none')
 
   function renderPiece(piece: Piece | null) {
     pieceLabel.plain(piece?.text ?? '')
     if (piece) {
-      pieceLabel.fill(piece.color)
+      pieceLabel.fill(piece.color).attr('data-army', piece.color)
       const bounds = pieceMetrics?.measureText(piece.text)
       if (bounds) {
         // SVG text uses a baseline. Offset it by the center of the visible glyph.
@@ -87,23 +142,97 @@ const renderSVG = (hex: InstanceType<typeof Hex>) => {
         pieceLabel.center(x, y)
       }
     }
-
-    // Keep a capture dot beside the glyph so both are visible.
-    moveDot.center(piece ? x + 17 : x, piece ? y - 15 : y)
   }
 
   renderPiece(board.get(key)?.piece ?? null)
-  return { renderPiece, moveDot }
+  return { renderPiece, tile }
 }
 
 const tiles = new Map(grid.toArray().map(hex => [getKey(hex), renderSVG(hex)]))
 
+function downloadGameState(content: string, filename: string, type: string) {
+  const file = new Blob([content], { type })
+  const url = URL.createObjectURL(file)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.append(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+const exportDialog = document.querySelector<HTMLDialogElement>('#game-state-dialog')
+const jsonPreview = document.querySelector<HTMLTextAreaElement>('#game-state-json')
+const asciiPreview = document.querySelector<HTMLTextAreaElement>('#game-state-ascii')
+const exportStatus = document.querySelector('#export-status')
+
+if (exportDialog && jsonPreview && asciiPreview && exportStatus) {
+  document.querySelector('#export-game-state')?.addEventListener('click', () => {
+    const snapshot = exportGameState(board)
+    jsonPreview.value = snapshot.json
+    asciiPreview.value = snapshot.ascii
+    exportStatus.textContent = ''
+    exportDialog.showModal()
+    jsonPreview.scrollTop = jsonPreview.scrollLeft = 0
+    asciiPreview.scrollTop = asciiPreview.scrollLeft = 0
+  })
+
+  const formats = [
+    { name: 'JSON', preview: jsonPreview, filename: 'starwell-game-state.json', type: 'application/json' },
+    { name: 'ASCII', preview: asciiPreview, filename: 'starwell-game-state.txt', type: 'text/plain' },
+  ]
+  for (const { name, preview, filename, type } of formats) {
+    const section = preview.closest('.export-format')
+    section?.querySelector('.export-copy')?.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(preview.value)
+        exportStatus.textContent = `Copied ${name} to the clipboard.`
+      } catch {
+        preview.select()
+        exportStatus.textContent = `Clipboard unavailable. ${name} is selected for manual copying.`
+      }
+    })
+    section?.querySelector('.export-download')?.addEventListener('click', () => {
+      downloadGameState(preview.value, filename, type)
+    })
+  }
+}
+
+const outlines = document.querySelector<HTMLInputElement>('#piece-outlines')
+if (outlines) {
+  const updateOutlines = () => draw.node.classList.toggle('piece-outlines-hidden', !outlines.checked)
+  updateOutlines()
+  outlines.addEventListener('change', updateOutlines)
+}
+
+for (const row of document.querySelectorAll<HTMLElement>('[data-palette-for]')) {
+  const paletteAttribute = `data-${row.dataset.paletteFor}-palette`
+  const target = row.dataset.paletteFor === 'sky' ? document.documentElement : draw.node
+  const buttons = row.querySelectorAll<HTMLButtonElement>('button[data-palette]')
+  const initialPalette = row.querySelector<HTMLButtonElement>('[aria-pressed="true"]')?.dataset.palette
+  if (initialPalette) target.setAttribute(paletteAttribute, initialPalette)
+
+  for (const button of buttons) {
+    button.addEventListener('click', () => {
+      const palette = button.dataset.palette ?? 'original'
+      target.setAttribute(paletteAttribute, palette)
+      for (const option of buttons) {
+        option.setAttribute('aria-pressed', String(option === button))
+      }
+    })
+  }
+}
+
 function select(position: CubeCoordinates | null) {
   selected = position
   const destinations = new Set(position ? legalMoves(board, position).map(getKey) : [])
-  for (const [key, { moveDot }] of tiles) {
-    if (destinations.has(key)) moveDot.show()
-    else moveDot.hide()
+  for (const [key, { tile }] of tiles) {
+    if (destinations.has(key)) {
+      tile.attr('data-destination', board.get(key)?.piece ? 'capture' : 'move')
+    } else {
+      tile.node.removeAttribute('data-destination')
+    }
   }
 }
 

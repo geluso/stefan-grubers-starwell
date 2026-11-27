@@ -5,7 +5,6 @@ export const PIECE_YELLOW = 'orange'
 export const PIECE_COLORS = [PIECE_WHITE, PIECE_PURPLE, PIECE_YELLOW]
 
 // Tile backgrounds
-const GRAY = 'lightgray'
 const WHITE = 'white'
 const BLUE = 'dodgerblue'
 const PINK = 'hotpink'
@@ -14,7 +13,7 @@ const YELLOW = 'yellow'
 
 export const COLOR_MAP = {
   // Ring 0
-  '(0, 0, 0)': GRAY,
+  '(0, 0, 0)': 'transparent',
   // Ring 1
   '(1, -1, 0)': BLUE,
   '(1, 0, -1)': WHITE,

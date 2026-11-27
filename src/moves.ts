@@ -7,7 +7,8 @@ type Cell = {
   readonly piece: Piece | null
 }
 
-type Board = ReadonlyMap<string, Cell>
+export type Board = ReadonlyMap<string, Cell>
+export const BOARD_RADIUS = 5
 
 // In order around a hex, so consecutive directions share a corner.
 const EDGE_STEPS: readonly CubeCoordinates[] = [
@@ -45,6 +46,7 @@ export function getKey({ q, r, s }: CubeCoordinates): string {
 export function createBoard(positions: Iterable<CubeCoordinates>, setup = PIECE_MAP): Board {
   const board = new Map<string, Cell>()
   for (const position of positions) {
+    if (position.q === 0 && position.r === 0) continue
     const key = getKey(position)
     const piece = setup[key]
     board.set(key, { position, piece: piece?.text ? piece : null })
@@ -98,10 +100,9 @@ export function legalMoves(board: Board, start: CubeCoordinates): CubeCoordinate
   const piece = board.get(getKey(start))?.piece
   if (!piece) return []
 
-  return movementSquares(board, start, piece).filter(end => {
-    if (board.get(getKey(end))?.piece?.text === KING) return false
-    return !isInCheck(boardAfterMove(board, start, end, piece), piece.color)
-  })
+  return movementSquares(board, start, piece).filter(end =>
+    !isInCheck(boardAfterMove(board, start, end, piece), piece.color),
+  )
 }
 
 export function makeMove(board: Board, start: CubeCoordinates, end: CubeCoordinates): Board | null {
