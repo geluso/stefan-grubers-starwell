@@ -2,11 +2,12 @@ import { SVG } from '@svgdotjs/svg.js'
 import { defineHex, Grid, spiral, type CubeCoordinates, type Point } from 'honeycomb-grid'
 
 import { bindBoardPointer } from './board-pointer'
+import { rotateViewClockwise, rotationForPlayer, viewHexPosition, viewOffset, type BoardRotation, type ViewPlayer } from './board-view'
 import { COLOR_MAP, getPlayerNumber, PIECE_COLORS } from './color-map'
 import { DEFAULT_GAME_RULES, type GameRules } from './game-rules'
 import { exportGameState, exportMoves } from './game-state'
 import { LOCAL_CPU_TIMING } from './local-cpu-config'
-import { chooseCpuTurn, randomizeStartingPositions, type LocalGameState, type LocalSeats } from './local-game'
+import { chooseCpuTurn, randomizeLocalSeats, type LocalGameState, type LocalSeats } from './local-game'
 import { BOARD_RADIUS, canDoubleJump, checkedPlayersBy, createBoard, getHexName, getKey, legalMoves, makeMove, previewDoubleJumps, type Board } from './moves'
 import { bindOnlinePlay, type OnlineGame } from './online'
 import { restoreOnlineBoard, serializeBoard } from './online-game'
@@ -31,7 +32,7 @@ const preferences = loadPreferences()
 let onlineGame: OnlineGame | null = null
 let onlineSaving = false
 let pendingOnlinePath: string[] | null = null
-let localSession: { id: string; seats: LocalSeats; owner: string | null } | null = null
+let localSession: { id: string; seats: LocalSeats; perspective: ViewPlayer; owner: string | null } | null = null
 let cpuTimer: number | undefined
 let cpuNextTurnAt = 0
 let cpuPreviewKey: string | null = null
@@ -44,6 +45,7 @@ let localGame: {
   lastMoveCell: HTMLTableCellElement | null
   lastMovePath: string
   lastMovePlayer: number
+  viewRotation: BoardRotation
   selected: CubeCoordinates | null
   secondKnightJump: boolean
 } | null = null
@@ -95,16 +97,17 @@ function captureMarkerPath(corners: Point[], center: Point): string {
   }).join(' ')
 }
 
-const renderSVG = (hex: InstanceType<typeof Hex>) => {
+const renderSVG = (hex: InstanceType<typeof Hex>, viewHex = hex, rotation: BoardRotation = 0) => {
   const key = getKey(hex)
   const color = COLOR_MAP[key as keyof typeof COLOR_MAP]
   const hexCorners = hex.corners
+  const viewCorners = viewHex.corners
   const tile = draw.group()
   const playable = board.has(key)
   const name = getHexName(hex.q, hex.r)
 
   const polygon = tile
-    .polygon(hexCorners.map(({ x, y }) => `${x},${y}`))
+    .polygon(viewCorners.map(({ x, y }) => [x, y]))
     .addClass('hex-tile')
     .fill(color)
 
@@ -112,22 +115,28 @@ const renderSVG = (hex: InstanceType<typeof Hex>) => {
 
   const x = polygon.cx()
   const y = polygon.cy()
+  const canonicalCenter = pointBetween(hexCorners[0], hexCorners[3], 0.5)
+  function labelPosition(point: Point) {
+    const offset = viewOffset({ x: point.x - canonicalCenter.x, y: point.y - canonicalCenter.y }, rotation)
+    return { x: x + offset.x, y: y + offset.y }
+  }
 
   if (hex.q === -BOARD_RADIUS || hex.s === BOARD_RADIUS) {
     const leftEdge = Math.min(...hexCorners.map(corner => corner.x))
+    const label = labelPosition({ x: leftEdge - edgeLabelOffset, y: canonicalCenter.y })
     tile.plain(name.slice(1))
       .addClass('hex-row-number')
       .font(edgeLabelFont)
       .fill(edgeLabelColor)
-      .center(leftEdge - edgeLabelOffset, y)
+      .center(label.x, label.y)
       .attr({ 'pointer-events': 'none', 'aria-hidden': 'true' })
   }
 
   if (hex.r === BOARD_RADIUS || hex.s === -BOARD_RADIUS) {
     const [, lowerRight, bottom] = hexCorners
     const midpoint = pointBetween(lowerRight, bottom, 0.5)
-    const distance = Math.hypot(midpoint.x - x, midpoint.y - y)
-    const label = pointBetween({ x, y }, midpoint, 1 + edgeLabelOffset / distance)
+    const distance = Math.hypot(midpoint.x - canonicalCenter.x, midpoint.y - canonicalCenter.y)
+    const label = labelPosition(pointBetween(canonicalCenter, midpoint, 1 + edgeLabelOffset / distance))
     tile.plain(name[0])
       .addClass('hex-column-letter')
       .font(edgeLabelFont)
@@ -150,14 +159,14 @@ const renderSVG = (hex: InstanceType<typeof Hex>) => {
   const starPoints = Array.from({ length: 10 }, (_, index) => {
     const angle = index * Math.PI / 5 - Math.PI / 2
     const radius = index % 2 === 0 ? 10 : 4
-    return `${x + Math.cos(angle) * radius},${y + Math.sin(angle) * radius}`
+    return [x + Math.cos(angle) * radius, y + Math.sin(angle) * radius] as [number, number]
   })
   tile.polygon(starPoints)
     .addClass('hex-jump-star')
     .fill('black')
     .attr({ 'pointer-events': 'none', 'aria-hidden': 'true' })
 
-  tile.path(captureMarkerPath(hexCorners, { x, y }))
+  tile.path(captureMarkerPath(viewCorners, { x, y }))
     .addClass('hex-capture-marker')
     .fill('none')
     .stroke({ color: 'black', width: 2, linecap: 'round', linejoin: 'round' })
@@ -192,6 +201,17 @@ const renderSVG = (hex: InstanceType<typeof Hex>) => {
 }
 
 const tiles = new Map(grid.toArray().map(hex => [getKey(hex), renderSVG(hex)]))
+let boardRotation: BoardRotation = 0
+
+function setBoardView(rotation: BoardRotation) {
+  if (boardRotation === rotation) return
+  boardRotation = rotation
+  draw.clear()
+  for (const hex of grid) {
+    const viewHex = grid.getHex(viewHexPosition(hex, rotation))!
+    tiles.set(getKey(hex), renderSVG(hex, viewHex, rotation))
+  }
+}
 
 const moveHistoryRows = document.querySelector<HTMLTableSectionElement>('#move-history-rows')
 const moveHistoryList = document.querySelector<HTMLElement>('.move-history-list')
@@ -563,6 +583,14 @@ function renderBoard() {
   for (const [key, { renderPiece }] of tiles) renderPiece(shown.get(key)?.piece ?? null)
 }
 
+document.querySelector('#rotate-board')?.addEventListener('click', () => {
+  cancelBoardPointer()
+  setBoardView(rotateViewClockwise(boardRotation))
+  renderBoard()
+  select(selected, secondKnightJump)
+  if (cpuPreviewKey) tiles.get(cpuPreviewKey)?.tile.attr('data-cpu-selected', 'true')
+})
+
 function updatePlayerNames(next: OnlineGame | null) {
   playerRoster.forEach((label, index) => {
     const fallback = `Player ${index + 1}`
@@ -584,7 +612,7 @@ function updateOnlineBoard(next: OnlineGame | null) {
   if (next && !onlineGame) {
     localGame = {
       history: history.slice(), rows: Array.from(moveHistoryRows?.rows ?? []), viewedTurn, currentPlayer,
-      lastMoveCell, lastMovePath, lastMovePlayer, selected, secondKnightJump,
+      lastMoveCell, lastMovePath, lastMovePlayer, viewRotation: boardRotation, selected, secondKnightJump,
     }
   }
 
@@ -626,6 +654,7 @@ function updateOnlineBoard(next: OnlineGame | null) {
     for (const _ of PIECE_COLORS) row.insertCell()
   }
   board = history[history.length - 1].board
+  if (!sameRoom) setBoardView(next ? 0 : savedLocalGame?.viewRotation ?? rotationForPlayer(localSession?.perspective ?? 1))
   select(next ? null : savedLocalGame?.selected ?? null, !next && savedLocalGame?.secondKnightJump)
   renderBoard()
   if (reviewingHistory()) history[viewedTurn].cell?.setAttribute('aria-current', 'step')
@@ -725,7 +754,8 @@ function saveLocalHistory() {
     player: cell.cellIndex + 1, notation: cell.textContent ?? '', board_after: serializeBoard(board),
   }] : [])
   const state: LocalGameState = {
-    version: 1, seats: session.seats, initial_board: serializeBoard(history[0].board), moves, current_player: currentPlayer,
+    version: 1, seats: session.seats, perspective_player: session.perspective,
+    initial_board: serializeBoard(history[0].board), moves, current_player: currentPlayer,
   }
   void online.saveLocalGame(session.id, state).then(() => {
     if (sequence === localSaveSequence && localSession === session && !onlineGame) setLocalStatus(localSaveStatus)
@@ -742,7 +772,7 @@ function localTurnFinished(cpuMoved = false) {
   scheduleCpu()
 }
 
-function startLocalGame(initial: Board, seats: LocalSeats, id: string, saved?: LocalGameState) {
+function startLocalGame(initial: Board, seats: LocalSeats, id: string, perspective: ViewPlayer, saved?: LocalGameState) {
   const savedTurns = saved?.moves.map(move => ({ ...move, board: restoreOnlineBoard(move.board_after) })) ?? []
   online.leaveGame()
   cancelBoardPointer()
@@ -750,7 +780,7 @@ function startLocalGame(initial: Board, seats: LocalSeats, id: string, saved?: L
   clearCpuPreview()
   cpuNextTurnAt = 0
   stalledCpuBoard = null
-  localSession = { id, seats, owner: online.currentUserId() }
+  localSession = { id, seats, perspective, owner: online.currentUserId() }
   gameRules = DEFAULT_GAME_RULES
   history.length = 0
   history.push({ board: initial, cell: null })
@@ -769,6 +799,7 @@ function startLocalGame(initial: Board, seats: LocalSeats, id: string, saved?: L
   }
   viewedTurn = history.length - 1
   board = history[viewedTurn].board
+  setBoardView(rotationForPlayer(perspective))
   currentPlayer = saved?.current_player ?? 1
   select(null)
   renderBoard()
@@ -813,11 +844,12 @@ async function showLocalSaves() {
           if (request !== saveListRequest || !localDialog.open || online.currentUserId() !== owner) return
           if (state?.version !== 1 || state.seats?.length !== 3 ||
               state.seats.some(seat => seat !== 'human' && seat !== 'cpu') ||
+              (state.perspective_player !== undefined && ![1, 2, 3].includes(state.perspective_player)) ||
               ![1, 2, 3].includes(state.current_player) || !Array.isArray(state.moves) ||
               state.moves.some(move => ![1, 2, 3].includes(move.player) || typeof move.notation !== 'string')) {
             throw new Error('Invalid local save.')
           }
-          startLocalGame(restoreOnlineBoard(state.initial_board), state.seats, save.id, state)
+          startLocalGame(restoreOnlineBoard(state.initial_board), state.seats, save.id, state.perspective_player ?? 1, state)
           localDialog.close()
         } catch {
           setLocalStatus(loadStatus, 'Could not resume this game.')
@@ -847,8 +879,8 @@ localForm.addEventListener('submit', event => {
   event.preventDefault()
   const fields = new FormData(localForm)
   const seats = [1, 2, 3].map(seat => fields.get(`local-seat-${seat}`) === 'cpu' ? 'cpu' : 'human') as LocalSeats
-  const initial = createBoard(grid)
-  startLocalGame(fields.has('random-start') ? randomizeStartingPositions(initial) : initial, seats, crypto.randomUUID())
+  const setup = fields.has('random-start') ? randomizeLocalSeats(seats) : { seats, perspective: 1 as const }
+  startLocalGame(createBoard(grid), setup.seats, crypto.randomUUID(), setup.perspective)
   localDialog.close()
 })
 

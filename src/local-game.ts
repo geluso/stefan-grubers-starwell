@@ -1,6 +1,7 @@
 import type { CubeCoordinates } from 'honeycomb-grid'
 
-import { getPlayerNumber, PIECE_COLORS } from './color-map'
+import type { ViewPlayer } from './board-view'
+import { getPlayerNumber } from './color-map'
 import { DEFAULT_GAME_RULES, type GameRules } from './game-rules'
 import { BOARD_RADIUS, canDoubleJump, getKey, legalMoveResults, type Board } from './moves'
 import type { BoardPosition } from './online-game'
@@ -12,6 +13,7 @@ export type LocalSeats = [LocalSeat, LocalSeat, LocalSeat]
 export type LocalGameState = {
   version: 1
   seats: LocalSeats
+  perspective_player?: ViewPlayer
   initial_board: BoardPosition
   moves: { player: number; notation: string; board_after: BoardPosition }[]
   current_player: number
@@ -28,17 +30,19 @@ const material = { [PAWN]: 100, [KNIGHT]: 320, [BISHOP]: 330, [ROOK]: 500, [QUEE
 const searchDepth = 3
 const candidateLimit = 4
 
-export function randomizeStartingPositions(board: Board, random = Math.random): Board {
-  const colors = [...PIECE_COLORS]
-  for (let index = colors.length - 1; index > 0; index--) {
+export function randomizeLocalSeats(seats: LocalSeats, random = Math.random) {
+  const order = [0, 1, 2]
+  for (let index = order.length - 1; index > 0; index--) {
     const other = Math.floor(random() * (index + 1))
-    const color = colors[index]
-    colors[index] = colors[other]
-    colors[other] = color
+    const seat = order[index]
+    order[index] = order[other]
+    order[other] = seat
   }
-  return new Map(Array.from(board, ([key, cell]) => [
-    key, cell.piece ? { ...cell, piece: { ...cell.piece, color: colors[getPlayerNumber(cell.piece.color) - 1] } } : cell,
-  ]))
+  const human = seats.indexOf('human')
+  return {
+    seats: order.map(index => seats[index]) as LocalSeats,
+    perspective: (human === -1 ? 1 : order.indexOf(human) + 1) as ViewPlayer,
+  }
 }
 
 function evaluate(board: Board): number[] {

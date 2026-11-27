@@ -9,7 +9,14 @@
         <script type="module" src="./src/main.ts"></script>
     </head>
     <body>
-        <main id="board-stage" class="board-stage" aria-label="Starwell board"></main>
+        <main id="board-stage" class="board-stage" aria-label="Starwell board">
+            <button type="button" id="rotate-board" class="export-action rotate-board" aria-label="Rotate board 60 degrees clockwise" title="Rotate board 60° clockwise">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 2 21 7v10l-9 5-9-5V7z"></path>
+                    <path d="M8 15a4.5 4.5 0 1 1 8-3m0-3v3h-3"></path>
+                </svg>
+            </button>
+        </main>
         <aside class="game-sidebar" aria-label="Starwell controls">
             <header class="game-header">
                 <a class="game-home" href="./" aria-label="Starwell home — start a new game">
