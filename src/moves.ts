@@ -1,5 +1,6 @@
 import type { CubeCoordinates } from 'honeycomb-grid'
 
+import { PIECE_COLORS } from './color-map'
 import { BISHOP, KING, KNIGHT, PAWN, PIECE_MAP, QUEEN, ROOK, type Piece } from './pieces'
 
 type Cell = {
@@ -93,13 +94,13 @@ function boardAfterMove(board: Board, start: CubeCoordinates, end: CubeCoordinat
   return next
 }
 
-function isInCheck(board: Board, color: string): boolean {
+function isInCheck(board: Board, color: string, attacker?: string): boolean {
   const king = Array.from(board.values()).find(cell => cell.piece?.text === KING && cell.piece.color === color)
   if (!king) return false
 
   const kingKey = getKey(king.position)
   for (const { position, piece } of board.values()) {
-    if (!piece || piece.color === color) continue
+    if (!piece || piece.color === color || (attacker !== undefined && piece.color !== attacker)) continue
 
     // Attacks use the piece's movement pattern without recursively checking its king.
     if (movementSquares(board, position, piece).some(square => getKey(square) === kingKey)) {
@@ -107,6 +108,12 @@ function isInCheck(board: Board, color: string): boolean {
     }
   }
   return false
+}
+
+export function checkedPlayersBy(board: Board, attacker: string): number[] {
+  return PIECE_COLORS.flatMap((color, index) =>
+    color !== attacker && isInCheck(board, color, attacker) ? [index + 1] : [],
+  )
 }
 
 export function legalMoves(board: Board, start: CubeCoordinates, mode: MoveMode = 'normal'): CubeCoordinates[] {

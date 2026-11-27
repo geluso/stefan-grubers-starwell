@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { defineHex, Grid, spiral } from 'honeycomb-grid'
 
 import { PIECE_PURPLE, PIECE_WHITE, PIECE_YELLOW } from './color-map'
-import { canDoubleJump, createBoard, getKey, legalMoves, makeMove, previewDoubleJumps } from './moves'
+import { canDoubleJump, checkedPlayersBy, createBoard, getKey, legalMoves, makeMove, previewDoubleJumps } from './moves'
 import { BISHOP, KING, KNIGHT, PAWN, QUEEN, ROOK } from './pieces'
 
 const grid = new Grid(defineHex(), spiral({ start: { q: 0, r: 0 }, radius: 5 }))
@@ -81,6 +81,32 @@ test('a pawn can capture a king when the move keeps its own king safe', () => {
     [getKey(hex(5, -2))]: { text: ROOK, color: PIECE_YELLOW },
   })
   expect(makeMove(pinned, start, target)).toBeNull()
+})
+
+test('check notation identifies every opposing king attacked by the moving army', () => {
+  const start = hex(0, -2)
+  const end = hex(2, -2)
+  const blackKing = hex(4, -2)
+  const board = createBoard(grid, {
+    [getKey(start)]: { text: ROOK, color: PIECE_YELLOW },
+    [getKey(end)]: { text: PAWN, color: PIECE_PURPLE },
+    [getKey(blackKing)]: { text: KING, color: PIECE_PURPLE },
+    [getKey(hex(2, 0))]: { text: KING, color: PIECE_WHITE },
+    [getKey(hex(4, -1))]: { text: ROOK, color: PIECE_WHITE },
+  })
+
+  expect(checkedPlayersBy(board, PIECE_YELLOW)).toEqual([])
+  expect(checkedPlayersBy(board, PIECE_WHITE)).toEqual([2])
+
+  const next = makeMove(board, start, end)
+  expect(next).not.toBeNull()
+  if (!next) return
+  expect(checkedPlayersBy(next, PIECE_YELLOW)).toEqual([2, 3])
+
+  const captured = makeMove(next, end, blackKing)
+  expect(captured).not.toBeNull()
+  if (!captured) return
+  expect(checkedPlayersBy(captured, PIECE_YELLOW)).not.toContain(2)
 })
 
 test('the knight hops over edge neighbors, and the bishop stops at a piece on its corner ray', () => {

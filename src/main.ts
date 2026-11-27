@@ -3,8 +3,8 @@ import { defineHex, Grid, spiral, type CubeCoordinates, type Point } from 'honey
 
 import { COLOR_MAP, getPlayerNumber, PIECE_COLORS } from './color-map'
 import { exportGameState } from './game-state'
-import { BOARD_RADIUS, canDoubleJump, createBoard, getHexName, getKey, legalMoves, makeMove, previewDoubleJumps, type Board } from './moves'
-import { BISHOP, KING, KNIGHT, PAWN, QUEEN, ROOK, type Piece } from './pieces'
+import { BOARD_RADIUS, canDoubleJump, checkedPlayersBy, createBoard, getHexName, getKey, legalMoves, makeMove, previewDoubleJumps, type Board } from './moves'
+import type { Piece } from './pieces'
 import { canMoveOnTurn, playerAfterMove } from './turn-order'
 
 // you may want the origin to be the top left corner of a hex's bounding box
@@ -163,13 +163,13 @@ const renderSVG = (hex: InstanceType<typeof Hex>) => {
 
 const tiles = new Map(grid.toArray().map(hex => [getKey(hex), renderSVG(hex)]))
 
-const moveSymbols = { [PAWN]: 'P', [KNIGHT]: 'K', [BISHOP]: 'B', [ROOK]: 'R', [QUEEN]: 'Q', [KING]: 'Kg' }
 const moveHistoryRows = document.querySelector<HTMLTableSectionElement>('#move-history-rows')
 const moveHistoryList = document.querySelector<HTMLElement>('.move-history-list')
 const playerHeaders = document.querySelectorAll('.move-history th')
 const enforceTurns = document.querySelector<HTMLInputElement>('#enforce-turns')
 let lastMovePlayer = 0
 let lastMoveCell: HTMLTableCellElement | null = null
+let lastMovePath = ''
 
 function updateTurnIndicator() {
   playerHeaders.forEach((header, index) => {
@@ -202,11 +202,11 @@ function moveLeg(position: CubeCoordinates, beforeMove: Board): string {
   return `${capture ? 'x' : '-'}${getHexName(position.q, position.r)}`
 }
 
-function recordMove(piece: Piece, start: CubeCoordinates, route: string, continuing: boolean) {
+function recordMove(piece: Piece, start: CubeCoordinates, route: string, result: Board, continuing: boolean) {
   if (!moveHistoryRows) return
 
   if (continuing && lastMoveCell) {
-    lastMoveCell.textContent += route
+    lastMovePath += route
   } else {
     const player = getPlayerNumber(piece.color)
     let row = moveHistoryRows.rows[moveHistoryRows.rows.length - 1]
@@ -215,10 +215,12 @@ function recordMove(piece: Piece, start: CubeCoordinates, route: string, continu
       for (const _ of PIECE_COLORS) row.insertCell()
     }
     lastMoveCell = row.cells[player - 1]
-    lastMoveCell.textContent = `${moveSymbols[piece.text]}${player} ${getHexName(start.q, start.r)}${route}`
+    lastMovePath = getHexName(start.q, start.r) + route
     lastMovePlayer = player
   }
 
+  const checks = checkedPlayersBy(result, piece.color).map(player => `P${player}+`)
+  lastMoveCell.textContent = [lastMovePath, ...checks].join(' ')
   if (moveHistoryList) moveHistoryList.scrollTop = moveHistoryList.scrollHeight
 }
 
@@ -365,7 +367,7 @@ function handleClick(position: CubeCoordinates) {
     if (next && afterFirst) {
       const canContinue = !powerMove && !board.get(key)?.piece && canDoubleJump(board, selected)
       const route = (via ? moveLeg(via, board) : '') + moveLeg(position, afterFirst)
-      recordMove(piece, selected, route, secondKnightJump)
+      recordMove(piece, selected, route, next, secondKnightJump)
       board = next
       tiles.get(startKey)?.renderPiece(null)
       if (via) tiles.get(getKey(via))?.renderPiece(null)
