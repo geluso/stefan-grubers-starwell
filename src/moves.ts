@@ -43,6 +43,12 @@ export function getKey({ q, r, s }: CubeCoordinates): string {
   return `(${q}, ${r}, ${s})`
 }
 
+export function getHexName(q: number, r: number): string {
+  const column = 'ABCDEFGHIJK'[q + BOARD_RADIUS]
+  const row = BOARD_RADIUS - r + 1
+  return `${column}${row}`
+}
+
 export function createBoard(positions: Iterable<CubeCoordinates>, setup = PIECE_MAP): Board {
   const board = new Map<string, Cell>()
   for (const position of positions) {

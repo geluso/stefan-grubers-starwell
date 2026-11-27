@@ -3,7 +3,7 @@ import { defineHex, Grid, spiral, type CubeCoordinates, type Point } from 'honey
 
 import { COLOR_MAP } from './color-map'
 import { exportGameState } from './game-state'
-import { BOARD_RADIUS, createBoard, getKey, legalMoves, makeMove } from './moves'
+import { BOARD_RADIUS, createBoard, getHexName, getKey, legalMoves, makeMove } from './moves'
 import type { Piece } from './pieces'
 
 // you may want the origin to be the top left corner of a hex's bounding box
@@ -67,8 +67,7 @@ const renderSVG = (hex: InstanceType<typeof Hex>) => {
   const hexCorners = hex.corners
   const tile = draw.group()
   const playable = board.has(key)
-  const row = BOARD_RADIUS - hex.r + 1
-  const column = 'ABCDEFGHIJK'[hex.q + BOARD_RADIUS]
+  const name = getHexName(hex.q, hex.r)
 
   const polygon = tile
     .polygon(hexCorners.map(({ x, y }) => `${x},${y}`))
@@ -82,7 +81,7 @@ const renderSVG = (hex: InstanceType<typeof Hex>) => {
 
   if (hex.q === -BOARD_RADIUS || hex.s === BOARD_RADIUS) {
     const leftEdge = Math.min(...hexCorners.map(corner => corner.x))
-    tile.plain(String(row))
+    tile.plain(name.slice(1))
       .addClass('hex-row-number')
       .font(edgeLabelFont)
       .fill(edgeLabelColor)
@@ -95,7 +94,7 @@ const renderSVG = (hex: InstanceType<typeof Hex>) => {
     const midpoint = pointBetween(lowerRight, bottom, 0.5)
     const distance = Math.hypot(midpoint.x - x, midpoint.y - y)
     const label = pointBetween({ x, y }, midpoint, 1 + edgeLabelOffset / distance)
-    tile.plain(column)
+    tile.plain(name[0])
       .addClass('hex-column-letter')
       .font(edgeLabelFont)
       .fill(edgeLabelColor)
@@ -120,7 +119,7 @@ const renderSVG = (hex: InstanceType<typeof Hex>) => {
     .stroke({ color: 'black', width: 2, linecap: 'round', linejoin: 'round' })
     .attr('pointer-events', 'none')
 
-  tile.plain(playable ? `${column}${row}` : '★')
+  tile.plain(playable ? name : '★')
     .addClass(playable ? 'hex-coordinates' : 'hex-center-star')
     .font({ size: playable ? 10 : 28, family: 'sans-serif' })
     .fill(playable ? 'black' : '#ffe34c')

@@ -2,7 +2,8 @@
 export const PIECE_WHITE = 'white'
 export const PIECE_PURPLE = 'purple'
 export const PIECE_YELLOW = 'orange'
-export const PIECE_COLORS = [PIECE_WHITE, PIECE_PURPLE, PIECE_YELLOW]
+// Player IDs start with the bottom army in the default view: red, black, green.
+export const PIECE_COLORS = [PIECE_YELLOW, PIECE_PURPLE, PIECE_WHITE]
 
 // Tile backgrounds
 const WHITE = 'white'
