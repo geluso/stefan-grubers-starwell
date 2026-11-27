@@ -1,6 +1,6 @@
 const storageKey = 'starwell.preferences'
 
-export type PreferenceName = 'pieces' | 'hexes' | 'background'
+export type PreferenceName = 'pieces' | 'hexes'
 
 export function loadPreferences(): Partial<Record<PreferenceName, unknown>> {
   try {

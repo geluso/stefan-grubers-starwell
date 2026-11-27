@@ -362,8 +362,7 @@ if (exportDialog && jsonPreview && asciiPreview && movesPreview && exportStatus)
 
 for (const row of document.querySelectorAll<HTMLElement>('[data-palette-for]')) {
   const paletteFor = row.dataset.paletteFor
-  if (paletteFor !== 'pieces' && paletteFor !== 'hexes' && paletteFor !== 'sky') continue
-  const name = paletteFor === 'sky' ? 'background' : paletteFor
+  if (paletteFor !== 'pieces' && paletteFor !== 'hexes') continue
   const paletteAttribute = `data-${paletteFor}-palette`
   const target = paletteFor === 'hexes' ? draw.node : document.documentElement
   const buttons = Array.from(row.querySelectorAll<HTMLButtonElement>('button[data-palette]'))
@@ -375,7 +374,7 @@ for (const row of document.querySelectorAll<HTMLElement>('[data-palette-for]')) 
     }
   }
 
-  const initial = buttons.find(button => button.dataset.palette === preferences[name]) ??
+  const initial = buttons.find(button => button.dataset.palette === preferences[paletteFor]) ??
     buttons.find(button => button.getAttribute('aria-pressed') === 'true')
   if (initial) applyPalette(initial)
 
@@ -383,7 +382,7 @@ for (const row of document.querySelectorAll<HTMLElement>('[data-palette-for]')) 
     button.addEventListener('click', () => {
       if (!button.dataset.palette) return
       applyPalette(button)
-      savePreference(name, button.dataset.palette)
+      savePreference(paletteFor, button.dataset.palette)
     })
   }
 }

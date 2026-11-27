@@ -85,28 +85,30 @@ const preferencesPage = `<!doctype html>
       const iframe = document.querySelector('iframe');
       const frame = iframe.contentWindow;
       const key = 'starwell.preferences';
-      const preferred = { pieces: 'original', hexes: 'metallic', background: 'lunar' };
-      const defaults = { pieces: 'alternate', hexes: 'wooden', background: 'nebula' };
+      const preferred = { pieces: 'original', hexes: 'metallic' };
+      const defaults = { pieces: 'alternate', hexes: 'wooden' };
       const readControls = board => ({
         pieces: board.querySelector('[data-palette-for="pieces"] [aria-pressed="true"]').dataset.palette,
         hexes: board.querySelector('[data-palette-for="hexes"] [aria-pressed="true"]').dataset.palette,
-        background: board.querySelector('[data-palette-for="sky"] [aria-pressed="true"]').dataset.palette,
       });
       const pieceOn = (board, name) => [...board.querySelectorAll('.hex-coordinates')]
         .find(label => label.textContent === name).parentElement;
       try {
         const board = frame.document;
+        const background = frame.getComputedStyle(board.documentElement).backgroundImage;
+        if (board.querySelector('[data-palette-for="sky"]') || background === 'none') {
+          throw new Error('The background should be visible without a picker');
+        }
         board.querySelector('.original-pieces').click();
         board.querySelector('.metallic-hexes').click();
-        board.querySelector('.lunar-sky').click();
         if (JSON.stringify(JSON.parse(frame.localStorage.getItem(key))) !== JSON.stringify(preferred)) {
-          throw new Error('The three choices were not saved');
+          throw new Error('The two choices were not saved');
         }
         for (const name of ['E2', 'H3']) {
           pieceOn(board, name).querySelector('.hex-tile').dispatchEvent(new frame.MouseEvent('click', { bubbles: true }));
         }
         if (!pieceOn(board, 'H3').querySelector('.hex-piece').textContent) throw new Error('The knight did not move');
-        frame.localStorage.setItem(key, JSON.stringify({ ...preferred, enforceTurns: false, outlines: false }));
+        frame.localStorage.setItem(key, JSON.stringify({ ...preferred, enforceTurns: false, outlines: false, background: 'space-needles' }));
 
         iframe.addEventListener('load', () => {
           try {
@@ -115,7 +117,7 @@ const preferencesPage = `<!doctype html>
             if (JSON.stringify(readControls(newBoard)) !== JSON.stringify(preferred) ||
                 svg.dataset.hexesPalette !== 'metallic' ||
                 newBoard.documentElement.dataset.piecesPalette !== 'original' ||
-                newBoard.documentElement.dataset.skyPalette !== 'lunar' ||
+                frame.getComputedStyle(newBoard.documentElement).backgroundImage !== background ||
                 !newBoard.querySelector('.move-history th:first-child[aria-current="true"]')) {
               throw new Error('The new game did not apply the saved preferences');
             }
