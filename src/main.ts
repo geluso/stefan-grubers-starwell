@@ -3,11 +3,13 @@ import { defineHex, Grid, spiral, type CubeCoordinates, type Point } from 'honey
 
 import { bindBoardPointer } from './board-pointer'
 import { COLOR_MAP, getPlayerNumber, PIECE_COLORS } from './color-map'
-import { DEFAULT_GAME_RULES } from './game-rules'
+import { DEFAULT_GAME_RULES, type GameRules } from './game-rules'
 import { exportGameState, exportMoves } from './game-state'
 import { BOARD_RADIUS, canDoubleJump, checkedPlayersBy, createBoard, getHexName, getKey, legalMoves, makeMove, previewDoubleJumps, type Board } from './moves'
+import { bindOnlinePlay, type OnlineGame } from './online'
+import { restoreOnlineBoard } from './online-game'
 import type { Piece } from './pieces'
-import { loadPreferences, savePreference, type PreferenceName } from './preferences'
+import { loadPreferences, savePreference } from './preferences'
 import { canMoveOnTurn, playerAfterMove } from './turn-order'
 
 // you may want the origin to be the top left corner of a hex's bounding box
@@ -15,7 +17,7 @@ import { canMoveOnTurn, playerAfterMove } from './turn-order'
 const Hex = defineHex({ dimensions: 30, origin: 'topLeft' })
 const center = { q: 0, r: 0 }
 const grid = new Grid(Hex, spiral({ start: center, radius: BOARD_RADIUS }))
-const gameRules = DEFAULT_GAME_RULES
+let gameRules: GameRules = DEFAULT_GAME_RULES
 let board = createBoard(grid)
 const history: { board: Board; cell: HTMLTableCellElement | null }[] = [{ board, cell: null }]
 let viewedTurn = 0
@@ -24,8 +26,22 @@ let secondKnightJump = false
 let doubleJumpRoutes: ReadonlyMap<string, CubeCoordinates> = new Map()
 let currentPlayer = 1
 const preferences = loadPreferences()
+let onlineGame: OnlineGame | null = null
+let onlineSaving = false
+let pendingOnlinePath: string[] | null = null
+let localGame: {
+  history: typeof history
+  rows: HTMLTableRowElement[]
+  viewedTurn: number
+  currentPlayer: number
+  lastMoveCell: HTMLTableCellElement | null
+  lastMovePath: string
+  lastMovePlayer: number
+  selected: CubeCoordinates | null
+  secondKnightJump: boolean
+} | null = null
 
-const draw = SVG().addTo('body').addClass('starwell-board').size('100%', '100%')
+const draw = SVG().addTo('#board-stage').addClass('starwell-board').size('100%', '100%')
 const pieceFont = { size: 48, family: 'sans-serif' }
 const edgeLabelFont = { size: 8, family: 'sans-serif', weight: 600 }
 const edgeLabelColor = '#e4e4e4'
@@ -174,10 +190,10 @@ const moveHistoryRows = document.querySelector<HTMLTableSectionElement>('#move-h
 const moveHistoryList = document.querySelector<HTMLElement>('.move-history-list')
 const historyPosition = document.querySelector<HTMLElement>('#history-position')
 const playerHeaders = document.querySelectorAll('.move-history th')
-const enforceTurns = document.querySelector<HTMLInputElement>('#enforce-turns')
 let lastMovePlayer = 0
 let lastMoveCell: HTMLTableCellElement | null = null
 let lastMovePath = ''
+const finishOnline = document.querySelector<HTMLButtonElement>('#online-finish')!
 
 function reviewingHistory(): boolean {
   return viewedTurn < history.length - 1
@@ -186,13 +202,14 @@ function reviewingHistory(): boolean {
 function updateHistoryPosition() {
   if (!historyPosition) return
   const latest = history.length - 1
-  historyPosition.textContent = latest === 0 ? 'Start of game' :
+  historyPosition.hidden = latest === 0
+  historyPosition.textContent = latest === 0 ? '' :
     reviewingHistory() ? `Reviewing turn ${viewedTurn} of ${latest}` : `Turn ${latest} of ${latest} · Live`
 }
 
 function updateTurnIndicator() {
   playerHeaders.forEach((header, index) => {
-    if (!reviewingHistory() && enforceTurns?.checked && index + 1 === currentPlayer) {
+    if (!reviewingHistory() && onlineGame?.status !== 'waiting' && index + 1 === currentPlayer) {
       header.setAttribute('aria-current', 'true')
     } else {
       header.removeAttribute('aria-current')
@@ -201,7 +218,11 @@ function updateTurnIndicator() {
 }
 
 function isPlayerTurn(piece: Piece): boolean {
-  return canMoveOnTurn(piece.color, currentPlayer, enforceTurns?.checked ?? false)
+  if (onlineGame) {
+    return !onlineSaving && onlineGame.status === 'active' && onlineGame.seat === onlineGame.current_player &&
+      canMoveOnTurn(piece.color, onlineGame.seat)
+  }
+  return canMoveOnTurn(piece.color, currentPlayer)
 }
 
 function updateTurnAfterMove(player: number, secondJumpPending = false) {
@@ -209,51 +230,34 @@ function updateTurnAfterMove(player: number, secondJumpPending = false) {
   updateTurnIndicator()
 }
 
-function bindCheckboxPreference(
-  input: HTMLInputElement | null,
-  name: PreferenceName,
-  apply: (checked: boolean) => void,
-) {
-  if (!input) return
-  const stored = preferences[name]
-  if (typeof stored === 'boolean') input.checked = stored
-  apply(input.checked)
-  input.addEventListener('change', () => {
-    apply(input.checked)
-    savePreference(name, input.checked)
-  })
-}
-
-bindCheckboxPreference(enforceTurns, 'enforceTurns', () => {
-  const piece = selected && board.get(getKey(selected))?.piece
-  if (piece && !isPlayerTurn(piece)) select(null)
-  updateTurnIndicator()
-})
+updateTurnIndicator()
 
 function moveLeg(position: CubeCoordinates, beforeMove: Board): string {
   const capture = beforeMove.get(getKey(position))?.piece
   return `${capture ? 'x' : '-'}${getHexName(position.q, position.r)}`
 }
 
-function recordMove(piece: Piece, start: CubeCoordinates, route: string, result: Board, continuing: boolean) {
+function addMoveCell(player: number) {
   if (!moveHistoryRows) return null
+  let row = moveHistoryRows.rows[moveHistoryRows.rows.length - 1]
+  if (!row || player <= lastMovePlayer) {
+    row = moveHistoryRows.insertRow()
+    for (const _ of PIECE_COLORS) row.insertCell()
+  }
+  lastMovePlayer = player
+  return row.cells[player - 1]
+}
 
+function recordMove(piece: Piece, start: CubeCoordinates, route: string, result: Board, continuing: boolean) {
   if (continuing && lastMoveCell) {
     lastMovePath += route
   } else {
-    const player = getPlayerNumber(piece.color)
-    let row = moveHistoryRows.rows[moveHistoryRows.rows.length - 1]
-    if (!row || player <= lastMovePlayer) {
-      row = moveHistoryRows.insertRow()
-      for (const _ of PIECE_COLORS) row.insertCell()
-    }
-    lastMoveCell = row.cells[player - 1]
+    lastMoveCell = addMoveCell(getPlayerNumber(piece.color))
     lastMovePath = getHexName(start.q, start.r) + route
-    lastMovePlayer = player
   }
 
   const checks = checkedPlayersBy(result, piece.color, gameRules).map(player => `P${player}+`)
-  lastMoveCell.textContent = [lastMovePath, ...checks].join(' ')
+  if (lastMoveCell) lastMoveCell.textContent = [lastMovePath, ...checks].join(' ')
   if (moveHistoryList) moveHistoryList.scrollTop = moveHistoryList.scrollHeight
   return lastMoveCell
 }
@@ -356,10 +360,6 @@ if (exportDialog && jsonPreview && asciiPreview && movesPreview && exportStatus)
   }
 }
 
-bindCheckboxPreference(document.querySelector<HTMLInputElement>('#piece-outlines'), 'outlines', checked => {
-  draw.node.classList.toggle('piece-outlines-hidden', !checked)
-})
-
 for (const row of document.querySelectorAll<HTMLElement>('[data-palette-for]')) {
   const paletteFor = row.dataset.paletteFor
   if (paletteFor !== 'pieces' && paletteFor !== 'hexes' && paletteFor !== 'sky') continue
@@ -409,12 +409,13 @@ function select(position: CubeCoordinates | null, continuingJump = false) {
 }
 
 function handleClick(position: CubeCoordinates) {
-  if (reviewingHistory()) return
+  if (reviewingHistory() || onlineSaving) return
   const key = getKey(position)
   const startKey = selected && getKey(selected)
   const piece = startKey && board.get(startKey)?.piece
   if (selected && startKey && piece && isPlayerTurn(piece)) {
     if (startKey === key) {
+      if (pendingOnlinePath) { void submitOnlineMove(pendingOnlinePath); return }
       if (secondKnightJump) updateTurnAfterMove(currentPlayer)
       select(null)
       return
@@ -426,6 +427,20 @@ function handleClick(position: CubeCoordinates) {
     const next = afterFirst && makeMove(afterFirst, via ?? selected, position, powerMove ? 'power' : 'normal', gameRules)
     if (next && afterFirst) {
       const canContinue = !powerMove && !board.get(key)?.piece && canDoubleJump(board, selected)
+      if (onlineGame) {
+        const name = (hex: CubeCoordinates) => getHexName(hex.q, hex.r)
+        const path = [...(pendingOnlinePath ?? [name(selected)]), ...(via ? [name(via)] : []), name(position)]
+        if (canContinue && legalMoves(next, position, 'power', gameRules).length > 0) {
+          pendingOnlinePath = path
+          board = next
+          renderBoard()
+          select(position, true)
+          finishOnline.hidden = false
+        } else {
+          void submitOnlineMove(path)
+        }
+        return
+      }
       const route = (via ? moveLeg(via, board) : '') + moveLeg(position, afterFirst)
       const cell = recordMove(piece, selected, route, next, secondKnightJump)
       const entry = { board: next, cell }
@@ -443,6 +458,7 @@ function handleClick(position: CubeCoordinates) {
     }
   }
 
+  if (pendingOnlinePath) { void submitOnlineMove(pendingOnlinePath); return }
   if (secondKnightJump) updateTurnAfterMove(currentPlayer)
   const target = board.get(key)?.piece
   select(target && isPlayerTurn(target) ? position : null)
@@ -454,7 +470,7 @@ function isMarkedDestination(key: string): boolean {
 
 const cancelBoardPointer = bindBoardPointer(draw.node, {
   press(key) {
-    if (reviewingHistory()) return null
+    if (reviewingHistory() || onlineSaving) return null
     const cell = board.get(key)
     if (!cell) return null
 
@@ -476,7 +492,7 @@ const cancelBoardPointer = bindBoardPointer(draw.node, {
 })
 
 function showHistoryTurn(turn: number) {
-  if (turn === viewedTurn) return
+  if (turn === viewedTurn || pendingOnlinePath || onlineSaving) return
   cancelBoardPointer()
   history[viewedTurn].cell?.removeAttribute('aria-current')
   viewedTurn = turn
@@ -497,7 +513,7 @@ function showHistoryTurn(turn: number) {
 }
 
 document.addEventListener('keydown', event => {
-  if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || exportDialog?.open) return
+  if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || document.querySelector('dialog[open]')) return
   const target = event.target
   if (target instanceof HTMLElement && (target.isContentEditable || target.matches('textarea, select, input:not([type="checkbox"])'))) return
 
@@ -513,3 +529,97 @@ document.addEventListener('keydown', event => {
   showHistoryTurn(turns[event.key as keyof typeof turns])
 })
 
+
+function renderBoard() {
+  const shown = reviewingHistory() ? history[viewedTurn].board : board
+  for (const [key, { renderPiece }] of tiles) renderPiece(shown.get(key)?.piece ?? null)
+}
+
+function updateOnlineBoard(next: OnlineGame | null) {
+  const savedLocalGame = localGame
+  const sameRoom = next?.id === onlineGame?.id
+  if (sameRoom && next?.revision === onlineGame?.revision) return
+  cancelBoardPointer()
+
+  if (next && !onlineGame) {
+    localGame = {
+      history: history.slice(), rows: Array.from(moveHistoryRows?.rows ?? []), viewedTurn, currentPlayer,
+      lastMoveCell, lastMovePath, lastMovePlayer, selected, secondKnightJump,
+    }
+  }
+
+  const reviewedTurn = sameRoom && reviewingHistory() ? viewedTurn : null
+  onlineGame = next
+  onlineSaving = false
+  pendingOnlinePath = null
+  finishOnline.hidden = true
+  gameRules = next?.rules ?? DEFAULT_GAME_RULES
+  moveHistoryRows?.replaceChildren()
+  lastMovePlayer = 0
+  lastMoveCell = null
+  lastMovePath = ''
+
+  if (next) {
+    history.length = 0
+    history.push({ board: restoreOnlineBoard(next.initial_board), cell: null })
+    for (const move of next.moves) {
+      const cell = addMoveCell(move.player)
+      if (cell) cell.textContent = move.notation
+      history.push({ board: restoreOnlineBoard(move.board_after), cell })
+    }
+    currentPlayer = next.current_player
+    viewedTurn = reviewedTurn ?? history.length - 1
+  } else if (savedLocalGame) {
+    history.splice(0, history.length, ...savedLocalGame.history)
+    moveHistoryRows?.replaceChildren(...savedLocalGame.rows)
+    currentPlayer = savedLocalGame.currentPlayer
+    viewedTurn = savedLocalGame.viewedTurn
+    lastMoveCell = savedLocalGame.lastMoveCell
+    lastMovePath = savedLocalGame.lastMovePath
+    lastMovePlayer = savedLocalGame.lastMovePlayer
+    localGame = null
+  }
+
+  if (moveHistoryRows && !moveHistoryRows.rows.length) {
+    const row = moveHistoryRows.insertRow()
+    for (const _ of PIECE_COLORS) row.insertCell()
+  }
+  board = history[history.length - 1].board
+  select(next ? null : savedLocalGame?.selected ?? null, !next && savedLocalGame?.secondKnightJump)
+  renderBoard()
+  if (reviewingHistory()) history[viewedTurn].cell?.setAttribute('aria-current', 'step')
+  else if (moveHistoryList) moveHistoryList.scrollTop = moveHistoryList.scrollHeight
+  updateHistoryPosition()
+  updateTurnIndicator()
+}
+
+const online = bindOnlinePlay(updateOnlineBoard)
+const newGameDialog = document.querySelector<HTMLDialogElement>('#new-game-dialog')!
+document.querySelector('#new-game-open')?.addEventListener('click', () => newGameDialog.showModal())
+document.querySelector('#new-game-online')?.addEventListener('click', () => {
+  newGameDialog.close()
+  online.openLobby()
+})
+
+async function submitOnlineMove(path: string[]) {
+  const game = onlineGame
+  if (!game || onlineSaving) return
+  onlineSaving = true
+  finishOnline.hidden = true
+  select(null)
+  try {
+    await online.move(game, path)
+  } catch {
+    if (onlineGame?.id === game.id) {
+      pendingOnlinePath = null
+      board = history[history.length - 1].board
+      renderBoard()
+    }
+  } finally {
+    if (onlineGame?.id === game.id) onlineSaving = false
+  }
+}
+
+finishOnline.addEventListener('click', () => {
+  if (pendingOnlinePath) void submitOnlineMove(pendingOnlinePath)
+})

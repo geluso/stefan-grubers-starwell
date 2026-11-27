@@ -85,11 +85,9 @@ const preferencesPage = `<!doctype html>
       const iframe = document.querySelector('iframe');
       const frame = iframe.contentWindow;
       const key = 'starwell.preferences';
-      const preferred = { enforceTurns: false, outlines: false, pieces: 'original', hexes: 'metallic', background: 'lunar' };
-      const defaults = { enforceTurns: true, outlines: true, pieces: 'alternate', hexes: 'wooden', background: 'nebula' };
+      const preferred = { pieces: 'original', hexes: 'metallic', background: 'lunar' };
+      const defaults = { pieces: 'alternate', hexes: 'wooden', background: 'nebula' };
       const readControls = board => ({
-        enforceTurns: board.querySelector('#enforce-turns').checked,
-        outlines: board.querySelector('#piece-outlines').checked,
         pieces: board.querySelector('[data-palette-for="pieces"] [aria-pressed="true"]').dataset.palette,
         hexes: board.querySelector('[data-palette-for="hexes"] [aria-pressed="true"]').dataset.palette,
         background: board.querySelector('[data-palette-for="sky"] [aria-pressed="true"]').dataset.palette,
@@ -98,31 +96,38 @@ const preferencesPage = `<!doctype html>
         .find(label => label.textContent === name).parentElement;
       try {
         const board = frame.document;
-        board.querySelector('#enforce-turns').click();
-        board.querySelector('#piece-outlines').click();
         board.querySelector('.original-pieces').click();
         board.querySelector('.metallic-hexes').click();
         board.querySelector('.lunar-sky').click();
         if (JSON.stringify(JSON.parse(frame.localStorage.getItem(key))) !== JSON.stringify(preferred)) {
-          throw new Error('The five choices were not saved');
+          throw new Error('The three choices were not saved');
         }
         for (const name of ['E2', 'H3']) {
           pieceOn(board, name).querySelector('.hex-tile').dispatchEvent(new frame.MouseEvent('click', { bubbles: true }));
         }
         if (!pieceOn(board, 'H3').querySelector('.hex-piece').textContent) throw new Error('The knight did not move');
+        frame.localStorage.setItem(key, JSON.stringify({ ...preferred, enforceTurns: false, outlines: false }));
 
         iframe.addEventListener('load', () => {
           try {
             const newBoard = frame.document;
             const svg = newBoard.querySelector('.starwell-board');
             if (JSON.stringify(readControls(newBoard)) !== JSON.stringify(preferred) ||
-                !svg.classList.contains('piece-outlines-hidden') || svg.dataset.hexesPalette !== 'metallic' ||
+                svg.dataset.hexesPalette !== 'metallic' ||
                 newBoard.documentElement.dataset.piecesPalette !== 'original' ||
                 newBoard.documentElement.dataset.skyPalette !== 'lunar' ||
-                newBoard.querySelector('.move-history th[aria-current]')) {
+                !newBoard.querySelector('.move-history th:first-child[aria-current="true"]')) {
               throw new Error('The new game did not apply the saved preferences');
             }
+            const startingKnight = pieceOn(newBoard, 'E2').querySelector('.hex-piece');
+            if (newBoard.querySelector('#piece-outlines') || frame.getComputedStyle(startingKnight).stroke !== 'rgb(0, 0, 0)') {
+              throw new Error('Default piece outlines should apply without a checkbox');
+            }
             if (pieceOn(newBoard, 'H3').querySelector('.hex-piece').textContent) throw new Error('The board did not reset');
+            for (const name of ['E7', 'F7']) {
+              pieceOn(newBoard, name).querySelector('.hex-tile').dispatchEvent(new frame.MouseEvent('click', { bubbles: true }));
+            }
+            if (pieceOn(newBoard, 'F7').querySelector('.hex-piece').textContent) throw new Error('A legacy preference disabled turn enforcement');
 
             iframe.addEventListener('load', () => {
               try {
@@ -148,7 +153,7 @@ const preferencesPage = `<!doctype html>
   </script>
 </body>`
 
-test.skipIf(!chrome)('all five preferences survive a new game and invalid storage falls back to defaults', () =>
+test.skipIf(!chrome)('palette preferences persist while removed settings are ignored', () =>
   runBrowserCheck(preferencesPage, ['--virtual-time-budget=4000']), 15_000)
 
 const historyPage = `<!doctype html>
@@ -176,6 +181,8 @@ const historyPage = `<!doctype html>
       };
 
       try {
+        verify(!position() && board.querySelector('#history-position').hidden, 'The history label should be hidden before the first turn');
+        verify(!board.querySelector('.online-controls button:not([hidden])'), 'The Moves panel should start without an online button');
         verify(exportedMoves() === '[]', 'A new game should have no exported moves');
         for (const name of ['E2', 'H3', 'E7', 'F7', 'K10', 'E10']) click(name);
         verify(position() === 'Turn 3 of 3 · Live', 'Three turns should be recorded');

@@ -1,7 +1,7 @@
 import { getPlayerNumber, PIECE_COLORS } from './color-map'
 
-export function canMoveOnTurn(color: string, currentPlayer: number, enforceTurns: boolean): boolean {
-  return !enforceTurns || getPlayerNumber(color) === currentPlayer
+export function canMoveOnTurn(color: string, currentPlayer: number): boolean {
+  return getPlayerNumber(color) === currentPlayer
 }
 
 export function playerAfterMove(player: number, secondJumpPending = false): number {

@@ -1,28 +1,9 @@
-import { getPlayerNumber } from './color-map'
 import { DEFAULT_GAME_RULES, type GameRules } from './game-rules'
 import { BOARD_RADIUS, getHexName, type Board } from './moves'
-import { BISHOP, KING, KNIGHT, PAWN, QUEEN, ROOK } from './pieces'
-
-const PIECE_LETTERS = {
-  [PAWN]: 'p',
-  [KNIGHT]: 'n',
-  [BISHOP]: 'b',
-  [ROOK]: 'r',
-  [QUEEN]: 'q',
-  [KING]: 'k',
-}
+import { serializeBoard } from './online-game'
 
 export function exportGameState(board: Board, rules: GameRules = DEFAULT_GAME_RULES): { json: string; ascii: string } {
-  const pieces = []
-  for (const { position: { q, r }, piece } of board.values()) {
-    if (!piece) continue
-    const player = getPlayerNumber(piece.color)
-    pieces.push({ piece: `${PIECE_LETTERS[piece.text]}${player}`, q, r })
-  }
-
-  // Columns increase with q, while the displayed row numbers increase as r decreases.
-  pieces.sort((a, b) => a.q - b.q || b.r - a.r)
-  const pieceAt = Object.fromEntries(pieces.map(({ q, r, piece }) => [getHexName(q, r), piece]))
+  const pieceAt = serializeBoard(board)
   const rows = []
   for (let r = -BOARD_RADIUS; r <= BOARD_RADIUS; r++) {
     const tokens = []

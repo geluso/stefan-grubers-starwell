@@ -4,13 +4,15 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "bun build index.html --target browser --minify --outdir dist",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "bun build index.html --target browser --minify --outdir dist --env STARWELL_PUBLIC_*",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build:edge": "bun build src/online-game.ts --target browser --outfile supabase/functions/_shared/online-game.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@supabase/supabase-js": "^2.119.2",
     "@svgdotjs/svg.js": "^3.2.8",
     "honeycomb-grid": "^4.1.5"
   }

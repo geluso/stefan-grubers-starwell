@@ -9,34 +9,64 @@
         <script type="module" src="./src/main.ts"></script>
     </head>
     <body>
-        <header class="game-header">
-            <a class="game-home" href="./" aria-label="Starwell home — start a new game">
-                <img class="game-title" src="./assets/starwell-title.webp" width="1000" height="334" alt="Starwell — 3-player Hex Chess">
-            </a>
-        </header>
-        <aside class="move-history" aria-labelledby="move-history-title">
-            <div class="move-history-header">
+        <main id="board-stage" class="board-stage" aria-label="Starwell board"></main>
+        <aside class="game-sidebar" aria-label="Starwell controls">
+            <header class="game-header">
+                <a class="game-home" href="./" aria-label="Starwell home — start a new game">
+                    <img class="game-title" src="./assets/starwell-title.webp" width="1000" height="334" alt="Starwell — 3-player Hex Chess">
+                </a>
+                <button type="button" id="new-game-open" class="export-action new-game-button" aria-haspopup="dialog">New Game</button>
+            </header>
+            <section class="move-history" aria-labelledby="move-history-title">
                 <h2 id="move-history-title">Moves</h2>
-                <label class="turn-toggle">
-                    Enforce turns:
-                    <input type="checkbox" id="enforce-turns" checked>
-                </label>
+                <div class="move-history-list">
+                    <table aria-labelledby="move-history-title">
+                        <thead>
+                            <tr>
+                                <th scope="col"><span class="move-player-color" aria-hidden="true"></span>Player 1</th>
+                                <th scope="col"><span class="move-player-color" aria-hidden="true"></span>Player 2</th>
+                                <th scope="col"><span class="move-player-color" aria-hidden="true"></span>Player 3</th>
+                            </tr>
+                        </thead>
+                        <tbody id="move-history-rows"><tr><td></td><td></td><td></td></tr></tbody>
+                    </table>
+                </div>
+                <p id="history-position" class="history-position" aria-live="polite" title="Left and right step through turns. Up goes to the start. Down returns to the live game." hidden></p>
+                <div class="online-controls">
+                    <button type="button" id="online-finish" class="export-action" hidden>Finish move</button>
+                    <span id="online-turn" role="status"></span>
+                </div>
+                <button type="button" id="export-game-state" class="export-action export-game-state">Export</button>
+            </section>
+            <div class="palette-panel">
+                <div class="palette-row" role="group" aria-labelledby="pieces-label" data-palette-for="pieces">
+                    <span id="pieces-label">Pieces</span>
+                    <button type="button" class="palette-button alternate-pieces" data-palette="alternate" data-tooltip="Red, black, and green" aria-pressed="true" aria-label="Red, black, and green pieces"></button>
+                    <button type="button" class="palette-button original-pieces" data-palette="original" data-tooltip="Orange, purple, and white" aria-pressed="false" aria-label="Orange, purple, and white pieces"></button>
+                </div>
+                <div class="palette-row" role="group" aria-labelledby="hexes-label" data-palette-for="hexes">
+                    <span id="hexes-label">Hexes</span>
+                    <button type="button" class="palette-button wooden-hexes" data-palette="wooden" data-tooltip="Wooden" aria-pressed="true" aria-label="Wooden hexes"></button>
+                    <button type="button" class="palette-button trans-hexes" data-palette="trans" data-tooltip="Trans" aria-pressed="false" aria-label="Trans hexes"></button>
+                    <button type="button" class="palette-button metallic-hexes" data-palette="metallic" data-tooltip="Metallic" aria-pressed="false" aria-label="Metallic hexes"></button>
+                </div>
+                <div class="palette-row" role="group" aria-labelledby="background-label" data-palette-for="sky">
+                    <span id="background-label">Background</span>
+                    <button type="button" class="palette-button nebula-sky" data-palette="nebula" data-tooltip="Green Nebula" aria-pressed="true" aria-label="Green Nebula background"></button>
+                    <button type="button" class="palette-button lunar-sky" data-palette="lunar" data-tooltip="Lunar" aria-pressed="false" aria-label="Lunar background"></button>
+                </div>
             </div>
-            <div class="move-history-list">
-                <table aria-labelledby="move-history-title">
-                    <thead>
-                        <tr>
-                            <th scope="col"><span class="move-player-color" aria-hidden="true"></span>Player 1</th>
-                            <th scope="col"><span class="move-player-color" aria-hidden="true"></span>Player 2</th>
-                            <th scope="col"><span class="move-player-color" aria-hidden="true"></span>Player 3</th>
-                        </tr>
-                    </thead>
-                    <tbody id="move-history-rows"><tr><td></td><td></td><td></td></tr></tbody>
-                </table>
-            </div>
-            <p id="history-position" class="history-position" aria-live="polite" title="Left and right step through turns. Up goes to the start. Down returns to the live game.">Start of game</p>
         </aside>
-        <button type="button" id="export-game-state" class="export-game-state">export game state</button>
+        <dialog id="new-game-dialog" class="export-dialog new-game-dialog" aria-labelledby="new-game-title">
+            <header class="export-dialog-header">
+                <h2 id="new-game-title">New Game</h2>
+                <form method="dialog"><button class="export-action">Close</button></form>
+            </header>
+            <div class="new-game-options">
+                <a class="export-action new-game-option" href="./">Local Game</a>
+                <button type="button" id="new-game-online" class="export-action new-game-option">Online Game</button>
+            </div>
+        </dialog>
         <dialog id="game-state-dialog" class="export-dialog" aria-labelledby="export-title">
             <header class="export-dialog-header">
                 <h2 id="export-title">Export game state</h2>
@@ -81,27 +111,42 @@
             </div>
             <p id="export-status" class="export-status" role="status"></p>
         </dialog>
-        <div class="palette-panel">
-            <label class="palette-row piece-outlines">
-                <span>Outlines</span>
-                <input type="checkbox" id="piece-outlines" checked>
-            </label>
-            <div class="palette-row" role="group" aria-labelledby="pieces-label" data-palette-for="pieces">
-                <span id="pieces-label">Pieces</span>
-                <button type="button" class="palette-button alternate-pieces" data-palette="alternate" data-tooltip="Red, black, and green" aria-pressed="true" aria-label="Red, black, and green pieces"></button>
-                <button type="button" class="palette-button original-pieces" data-palette="original" data-tooltip="Orange, purple, and white" aria-pressed="false" aria-label="Orange, purple, and white pieces"></button>
+        <dialog id="online-dialog" class="export-dialog online-dialog" aria-labelledby="online-title">
+            <header class="export-dialog-header">
+                <h2 id="online-title">Online play</h2>
+                <form method="dialog"><button class="export-action">Close</button></form>
+            </header>
+            <form id="online-login" hidden>
+                <label>Email <input name="email" type="email" autocomplete="email" required></label>
+                <button class="export-action">Send sign-in link</button>
+            </form>
+            <div id="online-account" hidden>
+                <form id="online-profile">
+                    <label>Display name <input name="displayName" maxlength="40" required></label>
+                    <button class="export-action">Save name</button>
+                </form>
+                <section id="online-lobby">
+                    <button type="button" id="online-current" class="export-action" hidden>Current game</button>
+                    <form id="online-create">
+                        <label>Knight rule <select name="knightJump">
+                            <option value="long">Long jump</option>
+                            <option value="short">Short jump</option>
+                        </select></label>
+                        <button class="export-action">Create game</button>
+                    </form>
+                    <form id="online-join">
+                        <label>Invite link <input name="invite" type="text" required></label>
+                        <button class="export-action">Join game</button>
+                    </form>
+                </section>
+                <section id="online-room" hidden aria-label="Game room">
+                    <ol id="online-seats"></ol>
+                    <button type="button" id="online-copy" class="export-action">Copy invite link</button>
+                    <button type="button" id="online-offline" class="export-action">Back to local game</button>
+                </section>
+                <button type="button" id="online-logout" class="export-action">Sign out</button>
             </div>
-            <div class="palette-row" role="group" aria-labelledby="hexes-label" data-palette-for="hexes">
-                <span id="hexes-label">Hexes</span>
-                <button type="button" class="palette-button wooden-hexes" data-palette="wooden" data-tooltip="Wooden" aria-pressed="true" aria-label="Wooden hexes"></button>
-                <button type="button" class="palette-button trans-hexes" data-palette="trans" data-tooltip="Trans" aria-pressed="false" aria-label="Trans hexes"></button>
-                <button type="button" class="palette-button metallic-hexes" data-palette="metallic" data-tooltip="Metallic" aria-pressed="false" aria-label="Metallic hexes"></button>
-            </div>
-            <div class="palette-row" role="group" aria-labelledby="background-label" data-palette-for="sky">
-                <span id="background-label">Background</span>
-                <button type="button" class="palette-button nebula-sky" data-palette="nebula" data-tooltip="Green Nebula" aria-pressed="true" aria-label="Green Nebula background"></button>
-                <button type="button" class="palette-button lunar-sky" data-palette="lunar" data-tooltip="Lunar" aria-pressed="false" aria-label="Lunar background"></button>
-            </div>
-        </div>
+            <p id="online-status" role="status"></p>
+        </dialog>
     </body>
 </html>

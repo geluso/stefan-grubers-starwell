@@ -1,6 +1,6 @@
 const storageKey = 'starwell.preferences'
 
-export type PreferenceName = 'enforceTurns' | 'outlines' | 'pieces' | 'hexes' | 'background'
+export type PreferenceName = 'pieces' | 'hexes' | 'background'
 
 export function loadPreferences(): Partial<Record<PreferenceName, unknown>> {
   try {
@@ -14,7 +14,7 @@ export function loadPreferences(): Partial<Record<PreferenceName, unknown>> {
   return {}
 }
 
-export function savePreference(name: PreferenceName, value: boolean | string) {
+export function savePreference(name: PreferenceName, value: string) {
   try {
     const preferences = { ...loadPreferences(), [name]: value }
     window.localStorage.setItem(storageKey, JSON.stringify(preferences))
