@@ -1,6 +1,7 @@
 import type { CubeCoordinates } from 'honeycomb-grid'
 
 import { PIECE_COLORS } from './color-map'
+import { DEFAULT_GAME_RULES, type GameRules } from './game-rules'
 import { BISHOP, KING, KNIGHT, PAWN, PIECE_MAP, QUEEN, ROOK, type Piece } from './pieces'
 
 type Cell = {
@@ -26,19 +27,29 @@ function add(a: CubeCoordinates, b: CubeCoordinates): CubeCoordinates {
   return { q: a.q + b.q, r: a.r + b.r, s: a.s + b.s }
 }
 
-// Left and right knight turns yield the same six offsets in a different order.
-// Those offsets are also the steps along the bishop's corner-to-corner rays.
+// Each bishop step crosses a corner between two neighboring edge directions.
 const CORNER_STEPS = EDGE_STEPS.map((step, index) =>
   add(step, EDGE_STEPS[(index + 1) % EDGE_STEPS.length]),
 )
 
+const KNIGHT_STEPS = EDGE_STEPS.flatMap((step, index) => {
+  const straight = add(step, step)
+  const left = EDGE_STEPS[(index + EDGE_STEPS.length - 1) % EDGE_STEPS.length]
+  const right = EDGE_STEPS[(index + 1) % EDGE_STEPS.length]
+  return [add(straight, left), add(straight, right)]
+})
+
 const MOVEMENT = {
   [PAWN]: { directions: EDGE_STEPS, limit: 1 },
   [KING]: { directions: EDGE_STEPS, limit: 1 },
-  [KNIGHT]: { directions: CORNER_STEPS, limit: 1 },
   [ROOK]: { directions: EDGE_STEPS, limit: Infinity },
   [BISHOP]: { directions: CORNER_STEPS, limit: Infinity },
   [QUEEN]: { directions: [...EDGE_STEPS, ...CORNER_STEPS], limit: Infinity },
+}
+
+const KNIGHT_MOVEMENT = {
+  short: { directions: CORNER_STEPS, limit: 1 },
+  long: { directions: KNIGHT_STEPS, limit: 1 },
 }
 
 export function getKey({ q, r, s }: CubeCoordinates): string {
@@ -68,8 +79,8 @@ export function createBoard(positions: Iterable<CubeCoordinates>, setup = PIECE_
   return board
 }
 
-function movementSquares(board: Board, start: CubeCoordinates, piece: Piece): CubeCoordinates[] {
-  const { directions, limit } = MOVEMENT[piece.text]
+function movementSquares(board: Board, start: CubeCoordinates, piece: Piece, rules: GameRules): CubeCoordinates[] {
+  const { directions, limit } = piece.text === KNIGHT ? KNIGHT_MOVEMENT[rules.knightJump] : MOVEMENT[piece.text]
   const squares: CubeCoordinates[] = []
 
   for (const direction of directions) {
@@ -94,7 +105,7 @@ function boardAfterMove(board: Board, start: CubeCoordinates, end: CubeCoordinat
   return next
 }
 
-function isInCheck(board: Board, color: string, attacker?: string): boolean {
+function isInCheck(board: Board, color: string, rules: GameRules, attacker?: string): boolean {
   const king = Array.from(board.values()).find(cell => cell.piece?.text === KING && cell.piece.color === color)
   if (!king) return false
 
@@ -103,40 +114,44 @@ function isInCheck(board: Board, color: string, attacker?: string): boolean {
     if (!piece || piece.color === color || (attacker !== undefined && piece.color !== attacker)) continue
 
     // Attacks use the piece's movement pattern without recursively checking its king.
-    if (movementSquares(board, position, piece).some(square => getKey(square) === kingKey)) {
+    if (movementSquares(board, position, piece, rules).some(square => getKey(square) === kingKey)) {
       return true
     }
   }
   return false
 }
 
-export function checkedPlayersBy(board: Board, attacker: string): number[] {
+export function checkedPlayersBy(board: Board, attacker: string, rules: GameRules = DEFAULT_GAME_RULES): number[] {
   return PIECE_COLORS.flatMap((color, index) =>
-    color !== attacker && isInCheck(board, color, attacker) ? [index + 1] : [],
+    color !== attacker && isInCheck(board, color, rules, attacker) ? [index + 1] : [],
   )
 }
 
-export function legalMoves(board: Board, start: CubeCoordinates, mode: MoveMode = 'normal'): CubeCoordinates[] {
+export function legalMoves(
+  board: Board, start: CubeCoordinates, mode: MoveMode = 'normal', rules: GameRules = DEFAULT_GAME_RULES,
+): CubeCoordinates[] {
   const piece = board.get(getKey(start))?.piece
   if (!piece) return []
 
-  return movementSquares(board, start, piece).filter(end => {
+  return movementSquares(board, start, piece, rules).filter(end => {
     if (mode === 'power' && board.get(getKey(end))?.piece) return false
-    return !isInCheck(boardAfterMove(board, start, end, piece), piece.color)
+    return !isInCheck(boardAfterMove(board, start, end, piece), piece.color, rules)
   })
 }
 
-export function previewDoubleJumps(board: Board, start: CubeCoordinates): ReadonlyMap<string, CubeCoordinates> {
+export function previewDoubleJumps(
+  board: Board, start: CubeCoordinates, rules: GameRules = DEFAULT_GAME_RULES,
+): ReadonlyMap<string, CubeCoordinates> {
   const routes = new Map<string, CubeCoordinates>()
   const knight = board.get(getKey(start))?.piece
   if (!knight || !canDoubleJump(board, start)) return routes
 
-  const firstLandings = legalMoves(board, start, 'power')
+  const firstLandings = legalMoves(board, start, 'power', rules)
   // Keep the first landing selectable as a single jump when either route can reach it.
   const singleJumpKeys = new Set([getKey(start), ...firstLandings.map(getKey)])
   for (const first of firstLandings) {
     const afterFirst = boardAfterMove(board, start, first, knight)
-    for (const second of legalMoves(afterFirst, first, 'power')) {
+    for (const second of legalMoves(afterFirst, first, 'power', rules)) {
       const key = getKey(second)
       if (!singleJumpKeys.has(key) && !routes.has(key)) {
         routes.set(key, first)
@@ -146,12 +161,14 @@ export function previewDoubleJumps(board: Board, start: CubeCoordinates): Readon
   return routes
 }
 
-export function makeMove(board: Board, start: CubeCoordinates, end: CubeCoordinates, mode: MoveMode = 'normal'): Board | null {
+export function makeMove(
+  board: Board, start: CubeCoordinates, end: CubeCoordinates, mode: MoveMode = 'normal', rules: GameRules = DEFAULT_GAME_RULES,
+): Board | null {
   const piece = board.get(getKey(start))?.piece
   if (!piece) return null
 
   const endKey = getKey(end)
-  const destination = legalMoves(board, start, mode).find(square => getKey(square) === endKey)
+  const destination = legalMoves(board, start, mode, rules).find(square => getKey(square) === endKey)
   if (!destination) return null
 
   return boardAfterMove(board, start, destination, piece)

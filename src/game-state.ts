@@ -1,4 +1,5 @@
 import { getPlayerNumber } from './color-map'
+import { DEFAULT_GAME_RULES, type GameRules } from './game-rules'
 import { BOARD_RADIUS, getHexName, type Board } from './moves'
 import { BISHOP, KING, KNIGHT, PAWN, QUEEN, ROOK } from './pieces'
 
@@ -11,7 +12,7 @@ const PIECE_LETTERS = {
   [KING]: 'k',
 }
 
-export function exportGameState(board: Board): { json: string; ascii: string } {
+export function exportGameState(board: Board, rules: GameRules = DEFAULT_GAME_RULES): { json: string; ascii: string } {
   const pieces = []
   for (const { position: { q, r }, piece } of board.values()) {
     if (!piece) continue
@@ -45,7 +46,14 @@ export function exportGameState(board: Board): { json: string; ascii: string } {
   ]
 
   return {
-    json: JSON.stringify({ version: 1, board: pieceAt }, null, 2) + '\n',
+    json: JSON.stringify({ version: 1, rules, board: pieceAt }, null, 2) + '\n',
     ascii: framedRows.join('\n') + '\n',
   }
+}
+
+export function exportMoves(rows: readonly (readonly (string | null)[])[], rules: GameRules = DEFAULT_GAME_RULES): string {
+  const lines = rows.map(row => `    [${row.map(value => JSON.stringify(value)).join(', ')}]`)
+  const moves = lines.length ? `[\n${lines.join(',\n')}\n  ]` : '[]'
+  const rulesJson = JSON.stringify(rules, null, 2).replaceAll('\n', '\n  ')
+  return `{\n  "version": 1,\n  "rules": ${rulesJson},\n  "moves": ${moves}\n}\n`
 }

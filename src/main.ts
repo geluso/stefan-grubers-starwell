@@ -1,10 +1,13 @@
 import { SVG } from '@svgdotjs/svg.js'
 import { defineHex, Grid, spiral, type CubeCoordinates, type Point } from 'honeycomb-grid'
 
+import { bindBoardPointer } from './board-pointer'
 import { COLOR_MAP, getPlayerNumber, PIECE_COLORS } from './color-map'
-import { exportGameState } from './game-state'
+import { DEFAULT_GAME_RULES } from './game-rules'
+import { exportGameState, exportMoves } from './game-state'
 import { BOARD_RADIUS, canDoubleJump, checkedPlayersBy, createBoard, getHexName, getKey, legalMoves, makeMove, previewDoubleJumps, type Board } from './moves'
 import type { Piece } from './pieces'
+import { loadPreferences, savePreference, type PreferenceName } from './preferences'
 import { canMoveOnTurn, playerAfterMove } from './turn-order'
 
 // you may want the origin to be the top left corner of a hex's bounding box
@@ -12,11 +15,15 @@ import { canMoveOnTurn, playerAfterMove } from './turn-order'
 const Hex = defineHex({ dimensions: 30, origin: 'topLeft' })
 const center = { q: 0, r: 0 }
 const grid = new Grid(Hex, spiral({ start: center, radius: BOARD_RADIUS }))
+const gameRules = DEFAULT_GAME_RULES
 let board = createBoard(grid)
+const history: { board: Board; cell: HTMLTableCellElement | null }[] = [{ board, cell: null }]
+let viewedTurn = 0
 let selected: CubeCoordinates | null = null
 let secondKnightJump = false
 let doubleJumpRoutes: ReadonlyMap<string, CubeCoordinates> = new Map()
 let currentPlayer = 1
+const preferences = loadPreferences()
 
 const draw = SVG().addTo('body').addClass('starwell-board').size('100%', '100%')
 const pieceFont = { size: 48, family: 'sans-serif' }
@@ -78,7 +85,7 @@ const renderSVG = (hex: InstanceType<typeof Hex>) => {
     .addClass('hex-tile')
     .fill(color)
 
-  if (playable) polygon.on('click', () => handleClick(hex))
+  if (playable) polygon.attr('data-hex-key', key)
 
   const x = polygon.cx()
   const y = polygon.cy()
@@ -158,22 +165,34 @@ const renderSVG = (hex: InstanceType<typeof Hex>) => {
   }
 
   renderPiece(board.get(key)?.piece ?? null)
-  return { renderPiece, tile }
+  return { renderPiece, pieceLabel, tile }
 }
 
 const tiles = new Map(grid.toArray().map(hex => [getKey(hex), renderSVG(hex)]))
 
 const moveHistoryRows = document.querySelector<HTMLTableSectionElement>('#move-history-rows')
 const moveHistoryList = document.querySelector<HTMLElement>('.move-history-list')
+const historyPosition = document.querySelector<HTMLElement>('#history-position')
 const playerHeaders = document.querySelectorAll('.move-history th')
 const enforceTurns = document.querySelector<HTMLInputElement>('#enforce-turns')
 let lastMovePlayer = 0
 let lastMoveCell: HTMLTableCellElement | null = null
 let lastMovePath = ''
 
+function reviewingHistory(): boolean {
+  return viewedTurn < history.length - 1
+}
+
+function updateHistoryPosition() {
+  if (!historyPosition) return
+  const latest = history.length - 1
+  historyPosition.textContent = latest === 0 ? 'Start of game' :
+    reviewingHistory() ? `Reviewing turn ${viewedTurn} of ${latest}` : `Turn ${latest} of ${latest} · Live`
+}
+
 function updateTurnIndicator() {
   playerHeaders.forEach((header, index) => {
-    if (enforceTurns?.checked && index + 1 === currentPlayer) {
+    if (!reviewingHistory() && enforceTurns?.checked && index + 1 === currentPlayer) {
       header.setAttribute('aria-current', 'true')
     } else {
       header.removeAttribute('aria-current')
@@ -190,12 +209,26 @@ function updateTurnAfterMove(player: number, secondJumpPending = false) {
   updateTurnIndicator()
 }
 
-enforceTurns?.addEventListener('change', () => {
+function bindCheckboxPreference(
+  input: HTMLInputElement | null,
+  name: PreferenceName,
+  apply: (checked: boolean) => void,
+) {
+  if (!input) return
+  const stored = preferences[name]
+  if (typeof stored === 'boolean') input.checked = stored
+  apply(input.checked)
+  input.addEventListener('change', () => {
+    apply(input.checked)
+    savePreference(name, input.checked)
+  })
+}
+
+bindCheckboxPreference(enforceTurns, 'enforceTurns', () => {
   const piece = selected && board.get(getKey(selected))?.piece
   if (piece && !isPlayerTurn(piece)) select(null)
   updateTurnIndicator()
 })
-updateTurnIndicator()
 
 function moveLeg(position: CubeCoordinates, beforeMove: Board): string {
   const capture = beforeMove.get(getKey(position))?.piece
@@ -203,7 +236,7 @@ function moveLeg(position: CubeCoordinates, beforeMove: Board): string {
 }
 
 function recordMove(piece: Piece, start: CubeCoordinates, route: string, result: Board, continuing: boolean) {
-  if (!moveHistoryRows) return
+  if (!moveHistoryRows) return null
 
   if (continuing && lastMoveCell) {
     lastMovePath += route
@@ -219,9 +252,26 @@ function recordMove(piece: Piece, start: CubeCoordinates, route: string, result:
     lastMovePlayer = player
   }
 
-  const checks = checkedPlayersBy(result, piece.color).map(player => `P${player}+`)
+  const checks = checkedPlayersBy(result, piece.color, gameRules).map(player => `P${player}+`)
   lastMoveCell.textContent = [lastMovePath, ...checks].join(' ')
   if (moveHistoryList) moveHistoryList.scrollTop = moveHistoryList.scrollHeight
+  return lastMoveCell
+}
+
+function exportMoveHistory(): string {
+  const rows = new Map<HTMLElement, (string | null)[]>()
+  for (const { cell } of history.slice(1, viewedTurn + 1)) {
+    const sourceRow = cell?.parentElement
+    if (!cell || !sourceRow) continue
+    let row = rows.get(sourceRow)
+    if (!row) {
+      row = PIECE_COLORS.map(() => null)
+      rows.set(sourceRow, row)
+    }
+    row[cell.cellIndex] = cell.textContent
+  }
+
+  return exportMoves([...rows.values()], gameRules)
 }
 
 function downloadGameState(content: string, filename: string, type: string) {
@@ -239,12 +289,14 @@ function downloadGameState(content: string, filename: string, type: string) {
 const exportDialog = document.querySelector<HTMLDialogElement>('#game-state-dialog')
 const jsonPreview = document.querySelector<HTMLTextAreaElement>('#game-state-json')
 const asciiPreview = document.querySelector<HTMLTextAreaElement>('#game-state-ascii')
+const movesPreview = document.querySelector<HTMLTextAreaElement>('#game-state-moves')
 const exportStatus = document.querySelector('#export-status')
 
-if (exportDialog && jsonPreview && asciiPreview && exportStatus) {
+if (exportDialog && jsonPreview && asciiPreview && movesPreview && exportStatus) {
   const formats = ([
     { key: 'json', name: 'JSON', preview: jsonPreview, filename: 'starwell-game-state.json', type: 'application/json' },
     { key: 'ascii', name: 'ASCII', preview: asciiPreview, filename: 'starwell-game-state.txt', type: 'text/plain' },
+    { key: 'moves', name: 'Moves', preview: movesPreview, filename: 'starwell-moves.json', type: 'application/json' },
   ] as const).map(format => {
     const section = format.preview.closest('.export-format')
     const lineNumbers = section?.querySelector<HTMLPreElement>('.export-line-gutter pre')
@@ -252,7 +304,7 @@ if (exportDialog && jsonPreview && asciiPreview && exportStatus) {
   })
 
   document.querySelector('#export-game-state')?.addEventListener('click', () => {
-    const snapshot = exportGameState(board)
+    const snapshot = { ...exportGameState(history[viewedTurn].board, gameRules), moves: exportMoveHistory() }
     for (const { key, preview, lineNumbers } of formats) {
       preview.value = snapshot[key]
       if (lineNumbers) {
@@ -304,40 +356,47 @@ if (exportDialog && jsonPreview && asciiPreview && exportStatus) {
   }
 }
 
-const outlines = document.querySelector<HTMLInputElement>('#piece-outlines')
-if (outlines) {
-  const updateOutlines = () => draw.node.classList.toggle('piece-outlines-hidden', !outlines.checked)
-  updateOutlines()
-  outlines.addEventListener('change', updateOutlines)
-}
+bindCheckboxPreference(document.querySelector<HTMLInputElement>('#piece-outlines'), 'outlines', checked => {
+  draw.node.classList.toggle('piece-outlines-hidden', !checked)
+})
 
 for (const row of document.querySelectorAll<HTMLElement>('[data-palette-for]')) {
-  const paletteAttribute = `data-${row.dataset.paletteFor}-palette`
-  const target = row.dataset.paletteFor === 'hexes' ? draw.node : document.documentElement
-  const buttons = row.querySelectorAll<HTMLButtonElement>('button[data-palette]')
-  const initialPalette = row.querySelector<HTMLButtonElement>('[aria-pressed="true"]')?.dataset.palette
-  if (initialPalette) target.setAttribute(paletteAttribute, initialPalette)
+  const paletteFor = row.dataset.paletteFor
+  if (paletteFor !== 'pieces' && paletteFor !== 'hexes' && paletteFor !== 'sky') continue
+  const name = paletteFor === 'sky' ? 'background' : paletteFor
+  const paletteAttribute = `data-${paletteFor}-palette`
+  const target = paletteFor === 'hexes' ? draw.node : document.documentElement
+  const buttons = Array.from(row.querySelectorAll<HTMLButtonElement>('button[data-palette]'))
+
+  function applyPalette(button: HTMLButtonElement) {
+    target.setAttribute(paletteAttribute, button.dataset.palette ?? '')
+    for (const option of buttons) {
+      option.setAttribute('aria-pressed', String(option === button))
+    }
+  }
+
+  const initial = buttons.find(button => button.dataset.palette === preferences[name]) ??
+    buttons.find(button => button.getAttribute('aria-pressed') === 'true')
+  if (initial) applyPalette(initial)
 
   for (const button of buttons) {
     button.addEventListener('click', () => {
-      const palette = button.dataset.palette ?? 'original'
-      target.setAttribute(paletteAttribute, palette)
-      for (const option of buttons) {
-        option.setAttribute('aria-pressed', String(option === button))
-      }
+      if (!button.dataset.palette) return
+      applyPalette(button)
+      savePreference(name, button.dataset.palette)
     })
   }
 }
 
 function select(position: CubeCoordinates | null, continuingJump = false) {
-  const destinations = new Set(position ? legalMoves(board, position, continuingJump ? 'power' : 'normal').map(getKey) : [])
+  const destinations = new Set(position ? legalMoves(board, position, continuingJump ? 'power' : 'normal', gameRules).map(getKey) : [])
   selected = continuingJump && !destinations.size ? null : position
   secondKnightJump = continuingJump && selected !== null
   const outerKnight = selected && !secondKnightJump && canDoubleJump(board, selected)
-  doubleJumpRoutes = selected && outerKnight ? previewDoubleJumps(board, selected) : new Map()
+  doubleJumpRoutes = selected && outerKnight ? previewDoubleJumps(board, selected, gameRules) : new Map()
   for (const [key, { tile }] of tiles) {
     const doubleJump = doubleJumpRoutes.has(key)
-    if (destinations.has(key) || doubleJump) {
+    if (!reviewingHistory() && (destinations.has(key) || doubleJump)) {
       const capture = board.get(key)?.piece
       const jump = secondKnightJump || doubleJump ? 'second' : outerKnight && !capture ? 'first' : null
       tile.attr('data-destination', capture ? 'capture' : 'move')
@@ -350,6 +409,7 @@ function select(position: CubeCoordinates | null, continuingJump = false) {
 }
 
 function handleClick(position: CubeCoordinates) {
+  if (reviewingHistory()) return
   const key = getKey(position)
   const startKey = selected && getKey(selected)
   const piece = startKey && board.get(startKey)?.piece
@@ -362,12 +422,17 @@ function handleClick(position: CubeCoordinates) {
 
     const via = doubleJumpRoutes.get(key)
     const powerMove = via !== undefined || secondKnightJump
-    const afterFirst = via ? makeMove(board, selected, via, 'power') : board
-    const next = afterFirst && makeMove(afterFirst, via ?? selected, position, powerMove ? 'power' : 'normal')
+    const afterFirst = via ? makeMove(board, selected, via, 'power', gameRules) : board
+    const next = afterFirst && makeMove(afterFirst, via ?? selected, position, powerMove ? 'power' : 'normal', gameRules)
     if (next && afterFirst) {
       const canContinue = !powerMove && !board.get(key)?.piece && canDoubleJump(board, selected)
       const route = (via ? moveLeg(via, board) : '') + moveLeg(position, afterFirst)
-      recordMove(piece, selected, route, next, secondKnightJump)
+      const cell = recordMove(piece, selected, route, next, secondKnightJump)
+      const entry = { board: next, cell }
+      if (secondKnightJump) history[history.length - 1] = entry
+      else history.push(entry)
+      viewedTurn = history.length - 1
+      updateHistoryPosition()
       board = next
       tiles.get(startKey)?.renderPiece(null)
       if (via) tiles.get(getKey(via))?.renderPiece(null)
@@ -382,4 +447,69 @@ function handleClick(position: CubeCoordinates) {
   const target = board.get(key)?.piece
   select(target && isPlayerTurn(target) ? position : null)
 }
+
+function isMarkedDestination(key: string): boolean {
+  return tiles.get(key)?.tile.node.hasAttribute('data-destination') ?? false
+}
+
+const cancelBoardPointer = bindBoardPointer(draw.node, {
+  press(key) {
+    if (reviewingHistory()) return null
+    const cell = board.get(key)
+    if (!cell) return null
+
+    const alreadySelected = selected && getKey(selected) === key
+    const selectedOnPress = Boolean(cell.piece && !alreadySelected && !isMarkedDestination(key))
+    if (selectedOnPress) handleClick(cell.position)
+
+    const piece = selected && getKey(selected) === key ? tiles.get(key)?.pieceLabel.node ?? null : null
+    return { piece, selectedOnPress }
+  },
+  click(key) {
+    const position = board.get(key)?.position
+    if (position) handleClick(position)
+  },
+  drop(key) {
+    const position = board.get(key)?.position
+    if (position && isMarkedDestination(key)) handleClick(position)
+  },
+})
+
+function showHistoryTurn(turn: number) {
+  if (turn === viewedTurn) return
+  cancelBoardPointer()
+  history[viewedTurn].cell?.removeAttribute('aria-current')
+  viewedTurn = turn
+  const entry = history[turn]
+  for (const [key, { renderPiece }] of tiles) {
+    renderPiece(entry.board.get(key)?.piece ?? null)
+  }
+  if (reviewingHistory()) {
+    entry.cell?.setAttribute('aria-current', 'step')
+    entry.cell?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    if (!entry.cell && moveHistoryList) moveHistoryList.scrollTop = 0
+  } else if (moveHistoryList) {
+    moveHistoryList.scrollTop = moveHistoryList.scrollHeight
+  }
+  select(selected, secondKnightJump)
+  updateHistoryPosition()
+  updateTurnIndicator()
+}
+
+document.addEventListener('keydown', event => {
+  if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || exportDialog?.open) return
+  const target = event.target
+  if (target instanceof HTMLElement && (target.isContentEditable || target.matches('textarea, select, input:not([type="checkbox"])'))) return
+
+  const latest = history.length - 1
+  const turns = {
+    ArrowLeft: Math.max(0, viewedTurn - 1),
+    ArrowRight: Math.min(latest, viewedTurn + 1),
+    ArrowUp: 0,
+    ArrowDown: latest,
+  }
+  if (!Object.hasOwn(turns, event.key)) return
+  event.preventDefault()
+  showHistoryTurn(turns[event.key as keyof typeof turns])
+})
 

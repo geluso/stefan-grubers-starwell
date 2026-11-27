@@ -2,7 +2,8 @@ import { expect, test } from 'bun:test'
 import { defineHex, Grid, spiral } from 'honeycomb-grid'
 
 import { PIECE_PURPLE, PIECE_WHITE, PIECE_YELLOW } from './color-map'
-import { exportGameState } from './game-state'
+import { DEFAULT_GAME_RULES, type GameRules } from './game-rules'
+import { exportGameState, exportMoves } from './game-state'
 import hexCoordinates from './hex-coordinates.json'
 import { BOARD_RADIUS, createBoard, getHexName } from './moves'
 import { KING, PAWN, QUEEN } from './pieces'
@@ -25,6 +26,7 @@ test('JSON and ASCII encode the same pieces at the named hexes', () => {
   const state = JSON.parse(json)
   expect(state).toEqual({
     version: 1,
+    rules: DEFAULT_GAME_RULES,
     board: {
       D1: 'q1',
       D2: 'p2',
@@ -45,6 +47,16 @@ test('JSON and ASCII encode the same pieces at the named hexes', () => {
   expect(rows[5]).toBe('..  ..  ..  ..  ..  ##  ..  ..  ..  ..  ..')
   expect(rows[9]).toBe('        ..  ..  ..  p2  ..  ..  ..')
   expect(rows[10]).toBe('          ..  ..  ..  q1  ..  ..')
+})
+
+test('board and move JSON preserve the same selected rules', () => {
+  const rules: GameRules = { knightJump: 'short' }
+  const { json } = exportGameState(createBoard(grid), rules)
+  const moves = [['E2-F1', null, null]]
+
+  expect(JSON.parse(json).rules).toEqual(rules)
+  expect(JSON.parse(exportMoves(moves, rules))).toEqual({ version: 1, rules, moves })
+  expect(JSON.parse(exportMoves([], rules)).moves).toEqual([])
 })
 
 test('the static coordinate lookup matches every hex name including the center hole', () => {

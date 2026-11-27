@@ -15,3 +15,14 @@ bun index.html
 
 Visit <http:localhost:3000>
 
+## Deploy to a static website
+
+Run these commands from the project directory.
+
+```sh
+bun install
+bun run build
+```
+
+Upload the contents of `dist/` to your website. The generated `index.html` loads bundled JavaScript, CSS, and image assets from that directory. Run the build again before deploying future updates.
+

@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 import { defineHex, Grid, spiral } from 'honeycomb-grid'
 
 import { PIECE_PURPLE, PIECE_WHITE, PIECE_YELLOW } from './color-map'
+import type { GameRules } from './game-rules'
 import { canDoubleJump, checkedPlayersBy, createBoard, getKey, legalMoves, makeMove, previewDoubleJumps } from './moves'
 import { BISHOP, KING, KNIGHT, PAWN, QUEEN, ROOK } from './pieces'
 
@@ -26,6 +27,23 @@ test('an absolutely pinned piece can keep the line blocked or capture the attack
   expect(next?.get(getKey(start))?.piece).toBeNull()
   expect(next?.get(getKey(attacker))?.piece?.color).toBe(PIECE_WHITE)
   expect(board.get(getKey(attacker))?.piece?.color).toBe(PIECE_PURPLE)
+})
+
+test('E2-H3 pins the green knight at J7 while the green rook at K7 can still move', () => {
+  const afterRed = makeMove(createBoard(grid), hex(-1, 4), hex(2, 3))
+  expect(afterRed).not.toBeNull()
+  if (!afterRed) return
+  const greenTurn = makeMove(afterRed, hex(-1, -1), hex(-1, 0))
+  expect(greenTurn).not.toBeNull()
+  if (!greenTurn) return
+
+  const knight = hex(4, -1)
+  const rook = hex(5, -1)
+  const k6 = hex(5, 0)
+  expect(greenTurn.get(getKey(knight))?.piece).toEqual({ text: KNIGHT, color: PIECE_WHITE })
+  expect(legalMoves(greenTurn, knight)).toEqual([])
+  expect(greenTurn.get(getKey(rook))?.piece).toEqual({ text: ROOK, color: PIECE_WHITE })
+  expect(legalMoves(greenTurn, rook).map(getKey)).toContain(getKey(k6))
 })
 
 test('king safety checks threats from both opponents and rejects a capture on a defended hex', () => {
@@ -109,22 +127,58 @@ test('check notation identifies every opposing king attacked by the moving army'
   expect(checkedPlayersBy(captured, PIECE_YELLOW)).not.toContain(2)
 })
 
-test('the knight hops over edge neighbors, and the bishop stops at a piece on its corner ray', () => {
+test('a knight jumps two straight steps and turns either way for twelve landings', () => {
+  const start = hex(0, 1)
+  const target = hex(3, 0)
+  const board = createBoard(grid, {
+    [getKey(start)]: { text: KNIGHT, color: PIECE_WHITE },
+    [getKey(hex(1, 1))]: { text: PAWN, color: PIECE_WHITE },
+    [getKey(hex(2, 1))]: { text: PAWN, color: PIECE_WHITE },
+    [getKey(target)]: { text: PAWN, color: PIECE_PURPLE },
+  })
+
+  const expected = [
+    hex(2, -2), hex(3, -1), hex(3, 0), hex(2, 2), hex(1, 3), hex(-1, 4),
+    hex(-2, 4), hex(-3, 3), hex(-3, 2), hex(-2, 0), hex(-1, -1), hex(1, -2),
+  ]
+  expect(legalMoves(board, start).map(getKey).sort()).toEqual(expected.map(getKey).sort())
+  expect(makeMove(board, start, target)?.get(getKey(target))?.piece).toEqual({ text: KNIGHT, color: PIECE_WHITE })
+})
+
+test('the selected knight rule governs movement, check, and power previews', () => {
+  const short: GameRules = { knightJump: 'short' }
+  const start = hex(0, 1)
+  const shortLanding = hex(2, 0)
+  const longLanding = hex(3, 0)
+  const board = createBoard(grid, {
+    [getKey(start)]: { text: KNIGHT, color: PIECE_YELLOW },
+    [getKey(shortLanding)]: { text: KING, color: PIECE_PURPLE },
+    [getKey(longLanding)]: { text: KING, color: PIECE_WHITE },
+  })
+  expect(legalMoves(board, start, 'normal', short)).toHaveLength(6)
+  expect(makeMove(board, start, shortLanding, 'normal', short)).not.toBeNull()
+  expect(makeMove(board, start, longLanding, 'normal', short)).toBeNull()
+  expect(checkedPlayersBy(board, PIECE_YELLOW, short)).toEqual([2])
+  expect(checkedPlayersBy(board, PIECE_YELLOW)).toEqual([3])
+
+  const edge = hex(0, 5)
+  const wallBoard = createBoard(grid, { [getKey(edge)]: { text: KNIGHT, color: PIECE_YELLOW } })
+  const via = previewDoubleJumps(wallBoard, edge, short).get(getKey(hex(2, 1)))
+  expect(via && getKey(via)).toBe(getKey(hex(1, 3)))
+})
+
+test('the bishop stops at a piece on its corner ray', () => {
   const start = hex(0, 2)
   const firstCorner = hex(2, 1)
   const secondCorner = hex(4, 0)
   const setup = {
+    [getKey(start)]: { text: BISHOP, color: PIECE_WHITE },
     [getKey(hex(1, 2))]: { text: PAWN, color: PIECE_WHITE },
     [getKey(hex(1, 1))]: { text: PAWN, color: PIECE_WHITE },
     [getKey(firstCorner)]: { text: PAWN, color: PIECE_PURPLE },
   }
 
-  const knight = createBoard(grid, { ...setup, [getKey(start)]: { text: KNIGHT, color: PIECE_WHITE } })
-  const knightMoves = legalMoves(knight, start).map(getKey)
-  expect(new Set(knightMoves).size).toBe(6)
-  expect(knightMoves).toContain(getKey(firstCorner))
-
-  const bishop = createBoard(grid, { ...setup, [getKey(start)]: { text: BISHOP, color: PIECE_WHITE } })
+  const bishop = createBoard(grid, setup)
   const bishopMoves = legalMoves(bishop, start).map(getKey)
   expect(bishopMoves).toContain(getKey(firstCorner))
   expect(bishopMoves).not.toContain(getKey(secondCorner))
@@ -159,10 +213,10 @@ test('the center hole rejects landings and blocks sliding moves', () => {
 
 test('knights can hop over the center hole and capture on the far side', () => {
   const start = hex(1, 0)
-  const landing = hex(-1, 1)
+  const landing = hex(-2, 1)
   const board = createBoard(grid, {
     [getKey(start)]: { text: KNIGHT, color: PIECE_WHITE },
-    [getKey(hex(0, 1))]: { text: PAWN, color: PIECE_WHITE },
+    [getKey(hex(-1, 0))]: { text: PAWN, color: PIECE_WHITE },
     [getKey(landing)]: { text: PAWN, color: PIECE_PURPLE },
   })
 
@@ -171,8 +225,8 @@ test('knights can hop over the center hole and capture on the far side', () => {
 
 test('only knights starting on the outer ring can take a second jump', () => {
   const start = hex(0, 5)
-  const first = hex(1, 3)
-  const second = hex(2, 1)
+  const first = hex(2, 2)
+  const second = hex(4, -1)
   const board = createBoard(grid, {
     [getKey(start)]: { text: KNIGHT, color: PIECE_WHITE },
   })
@@ -191,8 +245,8 @@ test('only knights starting on the outer ring can take a second jump', () => {
 
 test('a knight power cannot capture on either jump', () => {
   const start = hex(0, 5)
-  const first = hex(1, 3)
-  const second = hex(2, 1)
+  const first = hex(2, 2)
+  const second = hex(4, -1)
   const setup = { [getKey(start)]: { text: KNIGHT, color: PIECE_WHITE } }
   const firstOccupied = createBoard(grid, {
     ...setup,
@@ -217,31 +271,29 @@ test('a knight power cannot capture on either jump', () => {
 
 test('selecting a knight on F1 previews both single jumps and second-jump destinations', () => {
   const edge = hex(0, 5)
-  const knight = hex(-1, 4)
-  const board = makeMove(createBoard(grid), knight, edge)
-  expect(board).not.toBeNull()
-  if (!board) return
-
-  expect(legalMoves(board, edge).map(getKey).sort()).toEqual([getKey(knight), getKey(hex(1, 3))].sort())
+  const board = createBoard(grid, { [getKey(edge)]: { text: KNIGHT, color: PIECE_YELLOW } })
+  const singles = legalMoves(board, edge).map(getKey)
+  expect(singles.sort()).toEqual([hex(2, 2), hex(-2, 4), hex(-1, 3), hex(1, 2)].map(getKey).sort())
   const routes = previewDoubleJumps(board, edge)
-  expect([...routes.keys()].sort()).toEqual([hex(0, 2), hex(2, 1), hex(3, 2)].map(getKey).sort())
-  const via = routes.get(getKey(hex(2, 1)))
-  expect(via && getKey(via)).toBe(getKey(hex(1, 3)))
+  const via = routes.get(getKey(hex(4, -1)))
+  expect(via && getKey(via)).toBe(getKey(hex(2, 2)))
+  expect(routes.has(getKey(edge))).toBe(false)
+  expect(singles.some(key => routes.has(key))).toBe(false)
 })
 
 test('an enemy knight can threaten the king with a single jump but its power cannot give check', () => {
-  const king = hex(2, 0)
-  const threatened = hex(2, 1)
+  const king = hex(4, 0)
+  const threatened = hex(4, -1)
   const setup = {
     [getKey(king)]: { text: KING, color: PIECE_WHITE },
     [getKey(hex(0, 5))]: { text: KNIGHT, color: PIECE_PURPLE },
   }
   expect(makeMove(createBoard(grid, setup), king, threatened)).not.toBeNull()
 
-  const kingNearWall = hex(1, 2)
+  const kingNearWall = hex(2, 1)
   const nearBoard = createBoard(grid, {
     [getKey(kingNearWall)]: { text: KING, color: PIECE_WHITE },
     [getKey(hex(0, 5))]: { text: KNIGHT, color: PIECE_PURPLE },
   })
-  expect(makeMove(nearBoard, kingNearWall, hex(1, 3))).toBeNull()
+  expect(makeMove(nearBoard, kingNearWall, hex(2, 2))).toBeNull()
 })

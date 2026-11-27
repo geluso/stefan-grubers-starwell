@@ -34,6 +34,7 @@
                     <tbody id="move-history-rows"><tr><td></td><td></td><td></td></tr></tbody>
                 </table>
             </div>
+            <p id="history-position" class="history-position" aria-live="polite" title="Left and right step through turns. Up goes to the start. Down returns to the live game.">Start of game</p>
         </aside>
         <button type="button" id="export-game-state" class="export-game-state">export game state</button>
         <dialog id="game-state-dialog" class="export-dialog" aria-labelledby="export-title">
@@ -64,6 +65,17 @@
                     <div class="export-actions">
                         <button type="button" class="export-action export-copy" aria-label="Copy ASCII">Copy</button>
                         <button type="button" class="export-action export-download" aria-label="Download ASCII">Download</button>
+                    </div>
+                </section>
+                <section class="export-format" aria-labelledby="export-moves-title">
+                    <h3 id="export-moves-title">Moves</h3>
+                    <div class="export-preview export-preview-moves">
+                        <div class="export-line-gutter" aria-hidden="true"><pre></pre></div>
+                        <textarea id="game-state-moves" aria-labelledby="export-moves-title" readonly wrap="off" spellcheck="false"></textarea>
+                    </div>
+                    <div class="export-actions">
+                        <button type="button" class="export-action export-copy" aria-label="Copy Moves">Copy</button>
+                        <button type="button" class="export-action export-download" aria-label="Download Moves">Download</button>
                     </div>
                 </section>
             </div>

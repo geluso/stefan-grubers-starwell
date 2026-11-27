@@ -60,8 +60,17 @@ body {
     grid-row: 2;
     min-width: 0;
     min-height: 0;
+    touch-action: none;
     -webkit-user-select: none;
     user-select: none;
+}
+
+.hex-piece.is-dragged {
+    visibility: hidden;
+}
+
+.hex-drag-ghost {
+    opacity: 0.85;
 }
 
 .hex-tile {
@@ -210,6 +219,16 @@ html[data-pieces-palette="alternate"] .hex-piece[data-army="purple"] {
     text-align: left;
 }
 
+.move-history td[aria-current="step"] {
+    background: #4b365e;
+}
+
+.history-position {
+    margin: 8px 0 0;
+    color: #c7b4d6;
+    font-size: 11px;
+}
+
 .move-history th {
     position: sticky;
     top: 0;
@@ -327,7 +346,7 @@ html[data-pieces-palette="alternate"] .hex-piece[data-army="purple"] {
 
 .export-dialog {
     box-sizing: border-box;
-    width: min(880px, calc(100% - 24px));
+    width: min(1240px, calc(100% - 24px));
     max-height: calc(100dvh - 24px);
     padding: clamp(12px, 3vw, 24px);
     border: 1px solid #625071;
@@ -361,7 +380,7 @@ html[data-pieces-palette="alternate"] .hex-piece[data-army="purple"] {
 
 .export-formats {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 16px;
 }
 
@@ -385,8 +404,7 @@ html[data-pieces-palette="alternate"] .hex-piece[data-army="purple"] {
 }
 
 .export-preview-ascii {
-    height: calc(26em + 24px);
-    font-size: clamp(8.5px, 2.58vw, 12px);
+    font-size: clamp(8.5px, 0.87vw, 12px);
     line-height: 2;
 }
 
@@ -420,9 +438,26 @@ html[data-pieces-palette="alternate"] .hex-piece[data-army="purple"] {
     resize: none;
 }
 
-@media (max-width: 700px) {
-    .export-preview:not(.export-preview-ascii) {
+@media (max-width: 940px) {
+    .export-dialog {
+        width: min(640px, calc(100% - 24px));
+    }
+
+    .export-formats {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .export-preview {
         height: 200px;
+    }
+
+    .export-preview-ascii {
+        height: calc(26em + 24px);
+        font-size: clamp(8.5px, 2.58vw, 12px);
+    }
+
+    .export-preview-moves {
+        height: 150px;
     }
 }
 
